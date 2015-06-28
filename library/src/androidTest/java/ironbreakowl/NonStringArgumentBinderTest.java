@@ -25,5 +25,9 @@ public class NonStringArgumentBinderTest extends TestCase {
         assertEquals("a=? and b=1 and c=0 and d=2", binder.where);
         assertEquals(1, binder.selectionArgs.length);
         assertEquals("a", binder.selectionArgs[0]);
+
+        binder = new NonStringArgumentBinder("a='?' and b=?", new Object[] {2});
+        assertEquals("a='?' and b=2", binder.where);
+        assertEquals(0, binder.selectionArgs.length);
     }
 }

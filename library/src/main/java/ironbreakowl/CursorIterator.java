@@ -35,4 +35,15 @@ public class CursorIterator implements Iterator {
     public void remove() {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    protected void finalize() throws Throwable {
+        try {
+            if (mCursor != null) {
+                mCursor.close();
+            }
+        } finally {
+            super.finalize();
+        }
+    }
 }

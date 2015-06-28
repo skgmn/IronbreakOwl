@@ -13,7 +13,7 @@ class NonStringArgumentBinder {
         int selectionArgCount = 0;
         boolean hasNonString = false;
         for (Object arg : args) {
-            if (Owl.isNumber(arg) || arg instanceof Boolean) {
+            if (isNumber(arg) || arg instanceof Boolean) {
                 hasNonString = true;
             } else {
                 ++selectionArgCount;
@@ -43,7 +43,7 @@ class NonStringArgumentBinder {
             int start = m.start();
             Object arg = args[argIndex++];
             String stringValue;
-            if (Owl.isNumber(arg)) {
+            if (isNumber(arg)) {
                 stringValue = arg.toString();
             } else if (arg instanceof Boolean) {
                 stringValue = (Boolean) arg ? "1" : "0";
@@ -57,5 +57,14 @@ class NonStringArgumentBinder {
         }
         sb.append(where, lastEnd, where.length());
         this.where = sb.toString();
+    }
+
+    private static boolean isNumber(Object o) {
+        return o instanceof Byte ||
+                o instanceof Short ||
+                o instanceof Integer ||
+                o instanceof Long ||
+                o instanceof Float ||
+                o instanceof Double;
     }
 }

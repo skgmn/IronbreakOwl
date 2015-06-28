@@ -27,23 +27,26 @@ public class Owl {
         public Class modelClass;
         public Annotation query;
     }
-    
-    public String tableName;
-    public HashMap<Method, QueryInfo> queryInfos = new HashMap<>();
 
-    private static HashMap<Class, Owl> sOwls;
+    private static final HashMap<Class, Owl> sOwls = new HashMap<>();
+    static final ThreadLocal<Cursor> sLastCursor = new ThreadLocal<>();
+
+    public final String tableName;
+    public final HashMap<Method, QueryInfo> queryInfos = new HashMap<>();
+
+    public Owl(String tableName) {
+        this.tableName = tableName;
+    }
 
     public static <T> T create(final SQLiteDatabase db, Class<T> clazz) {
-        Owl owl = sOwls == null ? null : sOwls.get(clazz);
-        if (owl == null) {
-            owl = createOwl(clazz);
-        }
-        final Owl o = owl;
+        final Owl owl = getOwl(clazz);
         //noinspection unchecked
         return (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                QueryInfo queryInfo = o.queryInfos.get(method);
+                closeLastCursor();
+
+                QueryInfo queryInfo = owl.queryInfos.get(method);
                 if (queryInfo == null) {
                     throw new UnsupportedOperationException();
                 }
@@ -66,7 +69,8 @@ public class Owl {
                     if (columns.length == 0) {
                         columns = null;
                     }
-                    final Cursor cursor = db.query(o.tableName, columns, where, selectionArgs, null, null, null);
+                    final Cursor cursor = db.query(owl.tableName, columns, where, selectionArgs, null, null, null);
+                    sLastCursor.set(cursor);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_BOOLEAN:
                             boolean retVal = cursor.moveToNext();
@@ -82,7 +86,7 @@ public class Owl {
                             };
                     }
                 } else if (annotation instanceof Delete) {
-                    int affected = db.delete(o.tableName, where, selectionArgs);
+                    int affected = db.delete(owl.tableName, where, selectionArgs);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
                             return null;
@@ -98,9 +102,9 @@ public class Owl {
                     ContentValues values = makeValues(columns, args);
                     long retVal;
                     if (conflictAlgorithm == -1) {
-                        retVal = db.insert(o.tableName, null, values);
+                        retVal = db.insert(owl.tableName, null, values);
                     } else {
-                        retVal = db.insertWithOnConflict(o.tableName, null, values, conflictAlgorithm);
+                        retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
                     }
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
@@ -114,6 +118,16 @@ public class Owl {
                 return null;
             }
         });
+    }
+
+    static void closeLastCursor() {
+        Cursor cursor = sLastCursor.get();
+        if (cursor != null) {
+            if (!cursor.isClosed()) {
+                cursor.close();
+            }
+            sLastCursor.set(null);
+        }
     }
 
     static ContentValues makeValues(String[] columns, Object[] args) {
@@ -162,38 +176,34 @@ public class Owl {
         }
     }
 
-    static boolean isNumber(Object o) {
-        return o instanceof Byte ||
-                o instanceof Short ||
-                o instanceof Integer ||
-                o instanceof Long ||
-                o instanceof Float ||
-                o instanceof Double;
-    }
-
     public static String getTableName(Class clazz) {
         return getOwl(clazz).tableName;
     }
 
     @NonNull
     private static Owl getOwl(Class clazz) {
-        Owl owl = sOwls == null ? null : sOwls.get(clazz);
-        return owl == null ? createOwl(clazz) : owl;
+        synchronized (sOwls) {
+            Owl owl = sOwls.get(clazz);
+            if (owl == null) {
+                owl = parseClass(clazz);
+                sOwls.put(clazz, owl);
+            }
+            return owl;
+        }
     }
 
-    private static Owl createOwl(Class clazz) {
+    private static Owl parseClass(Class clazz) {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
         }
-
-        Owl owl = new Owl();
 
         Table table = (Table) clazz.getAnnotation(Table.class);
         if (table == null) {
             throw new IllegalArgumentException("@Table missing");
         }
-        owl.tableName = table.value();
+        String tableName = table.value();
 
+        Owl owl = new Owl(tableName);
         for (Method method : clazz.getMethods()) {
             QueryInfo queryInfo = new QueryInfo();
             boolean returnTypeValid = true;
@@ -266,15 +276,11 @@ public class Owl {
                 }
 
                 owl.queryInfos.put(method, queryInfo);
-                continue;
+//                continue;
             }
         }
 
-        if (sOwls == null) {
-            sOwls = new HashMap<>();
-        }
         sOwls.put(clazz, owl);
-
         return owl;
     }
 }

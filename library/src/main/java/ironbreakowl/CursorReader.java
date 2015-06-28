@@ -8,25 +8,17 @@ import java.lang.reflect.Proxy;
 import java.util.HashMap;
 
 class CursorReader {
-    private static HashMap<Class, CursorReader> sProxies;
+    private static final HashMap<Class, CursorReader> sReaders = new HashMap<>();
 
     private static class MethodInfo {
         public Column column;
         public Class returnType;
     }
 
-    public HashMap<Method, MethodInfo> methods = new HashMap<>();
+    public final HashMap<Method, MethodInfo> methods = new HashMap<>();
 
     public static <T> T create(final Cursor cursor, Class<T> clazz) {
-        CursorReader cursorReader = sProxies == null ? null : sProxies.get(clazz);
-        if (cursorReader == null) {
-            cursorReader = parseClass(clazz);
-            if (sProxies == null) {
-                sProxies = new HashMap<>();
-            }
-            sProxies.put(clazz, cursorReader);
-        }
-        final CursorReader cr = cursorReader;
+        final CursorReader cr = getReader(clazz);
         //noinspection unchecked
         return (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, new InvocationHandler() {
             @Override
@@ -56,7 +48,18 @@ class CursorReader {
         });
     }
 
-    private static <T> CursorReader parseClass(Class<T> clazz) {
+    private static CursorReader getReader(Class clazz) {
+        synchronized (sReaders) {
+            CursorReader reader = sReaders.get(clazz);
+            if (reader == null) {
+                reader = parseClass(clazz);
+                sReaders.put(clazz, reader);
+            }
+            return reader;
+        }
+    }
+
+    private static CursorReader parseClass(Class clazz) {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
         }
