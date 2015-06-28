@@ -7,8 +7,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
 
-class CursorProxy {
-    private static HashMap<Class, CursorProxy> sProxies;
+class CursorReader {
+    private static HashMap<Class, CursorReader> sProxies;
 
     private static class MethodInfo {
         public Column column;
@@ -18,20 +18,20 @@ class CursorProxy {
     public HashMap<Method, MethodInfo> methods = new HashMap<>();
 
     public static <T> T create(final Cursor cursor, Class<T> clazz) {
-        CursorProxy cursorProxy = sProxies == null ? null : sProxies.get(clazz);
-        if (cursorProxy == null) {
-            cursorProxy = parseClass(clazz);
+        CursorReader cursorReader = sProxies == null ? null : sProxies.get(clazz);
+        if (cursorReader == null) {
+            cursorReader = parseClass(clazz);
             if (sProxies == null) {
                 sProxies = new HashMap<>();
             }
-            sProxies.put(clazz, cursorProxy);
+            sProxies.put(clazz, cursorReader);
         }
-        final CursorProxy cp = cursorProxy;
+        final CursorReader cr = cursorReader;
         //noinspection unchecked
         return (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                MethodInfo methodInfo = cp.methods.get(method);
+                MethodInfo methodInfo = cr.methods.get(method);
                 String columnName = methodInfo.column.value();
                 Class returnType = methodInfo.returnType;
                 int columnIndex = cursor.getColumnIndex(columnName);
@@ -56,12 +56,12 @@ class CursorProxy {
         });
     }
 
-    private static <T> CursorProxy parseClass(Class<T> clazz) {
+    private static <T> CursorReader parseClass(Class<T> clazz) {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
         }
 
-        CursorProxy proxy = new CursorProxy();
+        CursorReader proxy = new CursorReader();
         HashMap<Method, MethodInfo> methods = proxy.methods;
         for (Method method : clazz.getMethods()) {
             Column column = method.getAnnotation(Column.class);

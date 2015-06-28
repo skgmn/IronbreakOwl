@@ -7,7 +7,6 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface Query {
-    String[] columns() default {};
+public @interface Delete {
     String where() default "";
 }

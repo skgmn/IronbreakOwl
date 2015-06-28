@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface Query {
-    String[] columns() default {};
-    String where() default "";
+public @interface Insert {
+    String[] columns();
+    int onConflict() default -1;
 }
