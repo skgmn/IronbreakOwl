@@ -4,7 +4,6 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
@@ -14,7 +13,6 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 
 public class Owl {
     private static final int RETURN_TYPE_BOOLEAN = 0;
@@ -27,6 +25,7 @@ public class Owl {
         public int returnType;
         public Class modelClass;
         public Annotation query;
+        public String where;
         public ConstantValues constValues;
         public boolean[] argWhereTarget;
         public String[] argColumnNames;
@@ -55,8 +54,7 @@ public class Owl {
                     throw new UnsupportedOperationException();
                 }
 
-                Annotation annotation = queryInfo.query;
-                String where = getSelection(annotation);
+                String where = queryInfo.where;
                 String[] selectionArgs;
                 if (where == null || where.length() == 0) {
                     where = null;
@@ -67,6 +65,7 @@ public class Owl {
                     selectionArgs = binder.selectionArgs;
                 }
 
+                Annotation annotation = queryInfo.query;
                 if (annotation instanceof Query) {
                     Query query = (Query) annotation;
                     String[] columns = query.select();
@@ -176,17 +175,6 @@ public class Owl {
         return values;
     }
 
-    @Nullable
-    static String getSelection(Annotation annotation) {
-        if (annotation instanceof Query) {
-            return ((Query) annotation).where();
-        } else if (annotation instanceof Delete) {
-            return ((Delete) annotation).where();
-        } else {
-            return null;
-        }
-    }
-
     public static String getTableName(Class clazz) {
         return getOwl(clazz).tableName;
     }
@@ -201,15 +189,6 @@ public class Owl {
             }
             return owl;
         }
-    }
-
-    private static int[] toArray(List<Integer> list) {
-        int size = list.size();
-        int[] array = new int[size];
-        for (int i = 0; i < size; i++) {
-            array[i] = list.get(i);
-        }
-        return array;
     }
 
     private static Owl parseClass(Class clazz) {
@@ -232,6 +211,7 @@ public class Owl {
             boolean returnTypeValid = true;
             if (query != null) {
                 queryInfo.query = query;
+                queryInfo.where = query.where();
                 parseParameters(method, queryInfo, true, false);
 
                 Type returnType = method.getGenericReturnType();
@@ -260,6 +240,7 @@ public class Owl {
             Delete delete = method.getAnnotation(Delete.class);
             if (delete != null) {
                 queryInfo.query = delete;
+                queryInfo.where = delete.where();
                 parseParameters(method, queryInfo, true, false);
 
                 Class returnType = method.getReturnType();
@@ -315,11 +296,10 @@ public class Owl {
         for (int i = 0; i < length; i++) {
             Annotation[] annotations = parameterAnnotations[i];
             for (Annotation annotation : annotations) {
-                Class<? extends Annotation> annotationClass = annotation.getClass();
-                if (where && annotationClass == Where.class) {
+                if (where && (annotation instanceof Where)) {
                     whereTarget[i] = true;
                 }
-                if (value && annotationClass == Value.class) {
+                if (value && (annotation instanceof Value)) {
                     columnNames[i] = ((Value) annotation).value();
                 }
             }
