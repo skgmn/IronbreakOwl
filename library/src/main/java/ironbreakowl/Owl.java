@@ -57,7 +57,8 @@ public class Owl {
                     selection = null;
                     selectionArgs = null;
                 } else {
-                    NonStringArgumentBinder binder = new NonStringArgumentBinder(selection, args, queryInfo.argWhereTarget);
+                    NonStringArgumentBinder binder = new NonStringArgumentBinder(selection, args, queryInfo
+                            .argWhereTarget);
                     selection = binder.selection;
                     selectionArgs = binder.selectionArgs;
                 }
