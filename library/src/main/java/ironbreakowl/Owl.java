@@ -32,7 +32,6 @@ public class Owl {
     }
 
     private static final HashMap<Class, Owl> sOwls = new HashMap<>();
-    static final ThreadLocal<Cursor> sLastCursor = new ThreadLocal<>();
 
     public final String tableName;
     public final HashMap<Method, QueryInfo> queryInfos = new HashMap<>();
@@ -47,21 +46,19 @@ public class Owl {
         return (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                closeLastCursor();
-
                 QueryInfo queryInfo = owl.queryInfos.get(method);
                 if (queryInfo == null) {
                     throw new UnsupportedOperationException();
                 }
 
-                String where = queryInfo.where;
+                String selection = queryInfo.where;
                 String[] selectionArgs;
-                if (where == null || where.length() == 0) {
-                    where = null;
+                if (selection == null || selection.length() == 0) {
+                    selection = null;
                     selectionArgs = null;
                 } else {
-                    NonStringArgumentBinder binder = new NonStringArgumentBinder(where, args, queryInfo.argWhereTarget);
-                    where = binder.where;
+                    NonStringArgumentBinder binder = new NonStringArgumentBinder(selection, args, queryInfo.argWhereTarget);
+                    selection = binder.selection;
                     selectionArgs = binder.selectionArgs;
                 }
 
@@ -72,8 +69,7 @@ public class Owl {
                     if (columns.length == 0) {
                         columns = null;
                     }
-                    final Cursor cursor = db.query(owl.tableName, columns, where, selectionArgs, null, null, null);
-                    sLastCursor.set(cursor);
+                    final Cursor cursor = db.query(owl.tableName, columns, selection, selectionArgs, null, null, null);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_BOOLEAN:
                             boolean retVal = cursor.moveToNext();
@@ -89,7 +85,7 @@ public class Owl {
                             };
                     }
                 } else if (annotation instanceof Delete) {
-                    int affected = db.delete(owl.tableName, where, selectionArgs);
+                    int affected = db.delete(owl.tableName, selection, selectionArgs);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
                             return null;
@@ -111,20 +107,21 @@ public class Owl {
                         case RETURN_TYPE_BOOLEAN:
                             return retVal != -1;
                     }
+                } else if (annotation instanceof Update) {
+                    ContentValues values = makeValues(queryInfo.argColumnNames, args, queryInfo.constValues);
+                    int retVal = db.update(owl.tableName, values, selection, selectionArgs);
+                    switch (queryInfo.returnType) {
+                        case RETURN_TYPE_VOID:
+                            return null;
+                        case RETURN_TYPE_INT:
+                            return retVal;
+                        case RETURN_TYPE_BOOLEAN:
+                            return retVal != 0;
+                    }
                 }
                 return null;
             }
         });
-    }
-
-    static void closeLastCursor() {
-        Cursor cursor = sLastCursor.get();
-        if (cursor != null) {
-            if (!cursor.isClosed()) {
-                cursor.close();
-            }
-            sLastCursor.set(null);
-        }
     }
 
     static ContentValues makeValues(String[] columns, Object[] args, ConstantValues constValues) {
@@ -264,6 +261,7 @@ public class Owl {
             Insert insert = method.getAnnotation(Insert.class);
             if (insert != null) {
                 queryInfo.query = insert;
+                parseParameters(method, queryInfo, false, true);
 
                 Class returnType = method.getReturnType();
                 if (returnType == Void.TYPE || returnType == Void.class) {
@@ -277,6 +275,30 @@ public class Owl {
                 }
                 if (!returnTypeValid) {
                     throw new IllegalArgumentException("void, boolean or long is supported for @Insert");
+                }
+
+                owl.queryInfos.put(method, queryInfo);
+                continue;
+            }
+
+            Update update = method.getAnnotation(Update.class);
+            if (update != null) {
+                queryInfo.query = update;
+                queryInfo.where = update.where();
+                parseParameters(method, queryInfo, true, true);
+
+                Class returnType = method.getReturnType();
+                if (returnType == Void.TYPE || returnType == Void.class) {
+                    queryInfo.returnType = RETURN_TYPE_VOID;
+                } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
+                    queryInfo.returnType = RETURN_TYPE_BOOLEAN;
+                } else if (returnType == Long.TYPE || returnType == Integer.class) {
+                    queryInfo.returnType = RETURN_TYPE_INT;
+                } else {
+                    returnTypeValid = false;
+                }
+                if (!returnTypeValid) {
+                    throw new IllegalArgumentException("void, boolean or int is supported for @Update");
                 }
 
                 owl.queryInfos.put(method, queryInfo);

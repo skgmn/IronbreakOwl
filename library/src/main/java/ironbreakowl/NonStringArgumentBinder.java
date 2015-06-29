@@ -7,9 +7,9 @@ class NonStringArgumentBinder {
     private static final Pattern PATTERN_ARGUMENT_PLACEHOLDER_OR_STRING = Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|\\?");
 
     public String[] selectionArgs;
-    public String where;
+    public String selection;
 
-    public NonStringArgumentBinder(String where, Object[] args, boolean[] whereTarget) {
+    public NonStringArgumentBinder(String selection, Object[] args, boolean[] whereTarget) {
         int selectionArgCount = 0;
         boolean hasNonString = false;
         int argLength = args.length;
@@ -28,11 +28,11 @@ class NonStringArgumentBinder {
                 if (!whereTarget[i]) continue;
                 selectionArgs[j++] = args[i].toString();
             }
-            this.where = where;
+            this.selection = selection;
             return;
         }
 
-        Matcher m = PATTERN_ARGUMENT_PLACEHOLDER_OR_STRING.matcher(where);
+        Matcher m = PATTERN_ARGUMENT_PLACEHOLDER_OR_STRING.matcher(selection);
         StringBuilder sb = new StringBuilder();
         int argIndex = 0;
         int selectionIndex = 0;
@@ -62,12 +62,12 @@ class NonStringArgumentBinder {
                 stringValue = "?";
                 selectionArgs[selectionIndex++] = arg.toString();
             }
-            sb.append(where, lastEnd, start);
+            sb.append(selection, lastEnd, start);
             sb.append(stringValue);
             lastEnd = m.end();
         }
-        sb.append(where, lastEnd, where.length());
-        this.where = sb.toString();
+        sb.append(selection, lastEnd, selection.length());
+        this.selection = sb.toString();
     }
 
     private static boolean isNumber(Object o) {
