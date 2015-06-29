@@ -4,6 +4,7 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
@@ -11,8 +12,12 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 public class Owl {
     private static final int RETURN_TYPE_BOOLEAN = 0;
@@ -24,11 +29,46 @@ public class Owl {
     private static class QueryInfo {
         public int returnType;
         public Class modelClass;
-        public Annotation query;
-        public String where;
-        public ConstantValues constValues;
-        public boolean[] argWhereTarget;
-        public String[] argColumnNames;
+    }
+
+    private static class SelectableQueryInfo extends QueryInfo {
+        public String selection;
+        public boolean[] isSelectionArgument;
+    }
+
+    private static class ValueSetter {
+        public String[] argumentColumnNames;
+        public List<Map.Entry<String, Object>> constantValues;
+    }
+
+    private interface ValueSettableQueryInfo {
+        ValueSetter valueSetter();
+    }
+
+    private static class SelectInfo extends SelectableQueryInfo {
+        public String[] projection;
+    }
+
+    private static class DeleteInfo extends SelectableQueryInfo {
+    }
+
+    private static class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
+        public ValueSetter valueSetter = new ValueSetter();
+        public int conflictAlgorithm;
+
+        @Override
+        public ValueSetter valueSetter() {
+            return valueSetter;
+        }
+    }
+
+    private static class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
+        public ValueSetter valueSetter = new ValueSetter();
+
+        @Override
+        public ValueSetter valueSetter() {
+            return valueSetter;
+        }
     }
 
     private static final HashMap<Class, Owl> sOwls = new HashMap<>();
@@ -51,26 +91,23 @@ public class Owl {
                     throw new UnsupportedOperationException();
                 }
 
-                String selection = queryInfo.where;
-                String[] selectionArgs;
-                if (selection == null || selection.length() == 0) {
-                    selection = null;
-                    selectionArgs = null;
-                } else {
-                    NonStringArgumentBinder binder = new NonStringArgumentBinder(selection, args, queryInfo
-                            .argWhereTarget);
-                    selection = binder.selection;
-                    selectionArgs = binder.selectionArgs;
+                String selection = null;
+                String[] selectionArgs = null;
+                if (queryInfo instanceof SelectableQueryInfo) {
+                    SelectableQueryInfo selectableQueryInfo = (SelectableQueryInfo) queryInfo;
+                    String s = selectableQueryInfo.selection;
+                    if (s != null && s.length() != 0) {
+                        NonStringArgumentBinder binder = new NonStringArgumentBinder(s, args, selectableQueryInfo
+                                .isSelectionArgument);
+                        selection = binder.selection;
+                        selectionArgs = binder.selectionArgs;
+                    }
                 }
 
-                Annotation annotation = queryInfo.query;
-                if (annotation instanceof Query) {
-                    Query query = (Query) annotation;
-                    String[] columns = query.select();
-                    if (columns.length == 0) {
-                        columns = null;
-                    }
-                    final Cursor cursor = db.query(owl.tableName, columns, selection, selectionArgs, null, null, null);
+                if (queryInfo instanceof SelectInfo) {
+                    String[] projection = ((SelectInfo) queryInfo).projection;
+                    final Cursor cursor = db.query(owl.tableName, projection, selection, selectionArgs, null, null,
+                            null);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_BOOLEAN:
                             boolean retVal = cursor.moveToNext();
@@ -85,7 +122,7 @@ public class Owl {
                                 }
                             };
                     }
-                } else if (annotation instanceof Delete) {
+                } else if (queryInfo instanceof DeleteInfo) {
                     int affected = db.delete(owl.tableName, selection, selectionArgs);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
@@ -95,11 +132,12 @@ public class Owl {
                         case RETURN_TYPE_BOOLEAN:
                             return affected != 0;
                     }
-                } else if (annotation instanceof Insert) {
-                    Insert insert = (Insert) annotation;
-                    int conflictAlgorithm = insert.onConflict();
-                    ContentValues values = makeValues(queryInfo.argColumnNames, args, queryInfo.constValues);
-                    long retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
+                } else if (queryInfo instanceof InsertInfo) {
+                    InsertInfo insertInfo = (InsertInfo) queryInfo;
+                    ValueSetter valueSetter = insertInfo.valueSetter;
+                    ContentValues values = makeValues(valueSetter.argumentColumnNames, args, valueSetter
+                            .constantValues);
+                    long retVal = db.insertWithOnConflict(owl.tableName, null, values, insertInfo.conflictAlgorithm);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
                             return null;
@@ -108,8 +146,11 @@ public class Owl {
                         case RETURN_TYPE_BOOLEAN:
                             return retVal != -1;
                     }
-                } else if (annotation instanceof Update) {
-                    ContentValues values = makeValues(queryInfo.argColumnNames, args, queryInfo.constValues);
+                } else if (queryInfo instanceof UpdateInfo) {
+                    UpdateInfo updateInfo = (UpdateInfo) queryInfo;
+                    ValueSetter valueSetter = updateInfo.valueSetter;
+                    ContentValues values = makeValues(valueSetter.argumentColumnNames, args, valueSetter
+                            .constantValues);
                     int retVal = db.update(owl.tableName, values, selection, selectionArgs);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
@@ -125,49 +166,42 @@ public class Owl {
         });
     }
 
-    static ContentValues makeValues(String[] columns, Object[] args, ConstantValues constValues) {
-        int length = args.length;
-        if (columns.length != length) {
-            throw new IllegalArgumentException("Mismatch: column count = " + columns.length + ", argument count = " +
-                    length);
+    private static void putValue(ContentValues values, String column, Object value) {
+        if (value == null) {
+            values.putNull(column);
+        } else if (value instanceof Boolean) {
+            values.put(column, (Boolean) value);
+        } else if (value instanceof Byte) {
+            values.put(column, (Byte) value);
+        } else if (value instanceof byte[]) {
+            values.put(column, (byte[]) value);
+        } else if (value instanceof Double) {
+            values.put(column, (Double) value);
+        } else if (value instanceof Float) {
+            values.put(column, (Float) value);
+        } else if (value instanceof Integer) {
+            values.put(column, (Integer) value);
+        } else if (value instanceof Long) {
+            values.put(column, (Long) value);
+        } else if (value instanceof Short) {
+            values.put(column, (Short) value);
+        } else if (value instanceof String) {
+            values.put(column, (String) value);
         }
+    }
+
+    static ContentValues makeValues(String[] names, Object[] args, @Nullable List<Map.Entry<String, Object>>
+            constValues) {
+        int length = args.length;
         ContentValues values = new ContentValues();
         for (int i = 0; i < length; i++) {
-            String column = columns[i];
+            String column = names[i];
             if (column == null) continue;
-
-            Object arg = args[i];
-            if (arg == null) {
-                values.putNull(column);
-            } else if (arg instanceof Boolean) {
-                values.put(column, (Boolean) arg);
-            } else if (arg instanceof Byte) {
-                values.put(column, (Byte) arg);
-            } else if (arg instanceof byte[]) {
-                values.put(column, (byte[]) arg);
-            } else if (arg instanceof Double) {
-                values.put(column, (Double) arg);
-            } else if (arg instanceof Float) {
-                values.put(column, (Float) arg);
-            } else if (arg instanceof Integer) {
-                values.put(column, (Integer) arg);
-            } else if (arg instanceof Long) {
-                values.put(column, (Long) arg);
-            } else if (arg instanceof Short) {
-                values.put(column, (Short) arg);
-            } else if (arg instanceof String) {
-                values.put(column, (String) arg);
-            }
+            putValue(values, column, args[i]);
         }
         if (constValues != null) {
-            String[] intKeys = constValues.intKeys();
-            int[] intValues = constValues.intValues();
-            int length2 = intKeys.length;
-            if (length2 != intValues.length) {
-                throw new IllegalArgumentException("intKeys and intValues should have same size");
-            }
-            for (int i = 0; i < length2; i++) {
-                values.put(intKeys[i], intValues[i]);
+            for (Map.Entry<String, Object> entry : constValues) {
+                putValue(values, entry.getKey(), entry.getValue());
             }
         }
         return values;
@@ -189,6 +223,23 @@ public class Owl {
         }
     }
 
+    private static List<Map.Entry<String, Object>> parseConstantValues(Method method) {
+        ConstantValues values = method.getAnnotation(ConstantValues.class);
+        if (values == null) return null;
+
+        ArrayList<Map.Entry<String, Object>> list = new ArrayList<>();
+        String[] intKeys = values.intKeys();
+        int[] intValues = values.intValues();
+        int length = intKeys.length;
+        if (length != intValues.length) {
+            throw new IllegalArgumentException("intKeys.length should be equal to intValues.length");
+        }
+        for (int i = 0; i < length; i++) {
+            list.add(new AbstractMap.SimpleEntry<String, Object>(intKeys[i], intValues[i]));
+        }
+        return list;
+    }
+
     private static Owl parseClass(Class clazz) {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
@@ -202,28 +253,26 @@ public class Owl {
 
         Owl owl = new Owl(tableName);
         for (Method method : clazz.getMethods()) {
-            QueryInfo queryInfo = new QueryInfo();
-            queryInfo.constValues = method.getAnnotation(ConstantValues.class);
-
             Query query = method.getAnnotation(Query.class);
             boolean returnTypeValid = true;
             if (query != null) {
-                queryInfo.query = query;
-                queryInfo.where = query.where();
-                parseParameters(method, queryInfo, true, false);
+                SelectInfo info = new SelectInfo();
+                info.selection = query.where();
+                info.projection = query.select();
+                parseParameters(method, info);
 
                 Type returnType = method.getGenericReturnType();
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
                     if (rawType == Iterable.class) {
-                        queryInfo.returnType = RETURN_TYPE_ITERABLE;
-                        queryInfo.modelClass = (Class) pt.getActualTypeArguments()[0];
+                        info.returnType = RETURN_TYPE_ITERABLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;
                     }
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
-                    queryInfo.returnType = RETURN_TYPE_BOOLEAN;
+                    info.returnType = RETURN_TYPE_BOOLEAN;
                 } else {
                     returnTypeValid = false;
                 }
@@ -231,23 +280,23 @@ public class Owl {
                     throw new IllegalArgumentException("Only Iterable<T> is supported.");
                 }
 
-                owl.queryInfos.put(method, queryInfo);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
             Delete delete = method.getAnnotation(Delete.class);
             if (delete != null) {
-                queryInfo.query = delete;
-                queryInfo.where = delete.where();
-                parseParameters(method, queryInfo, true, false);
+                DeleteInfo info = new DeleteInfo();
+                info.selection = delete.where();
+                parseParameters(method, info);
 
                 Class returnType = method.getReturnType();
                 if (returnType == Void.TYPE || returnType == Void.class) {
-                    queryInfo.returnType = RETURN_TYPE_VOID;
+                    info.returnType = RETURN_TYPE_VOID;
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
-                    queryInfo.returnType = RETURN_TYPE_BOOLEAN;
+                    info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Integer.TYPE || returnType == Integer.class) {
-                    queryInfo.returnType = RETURN_TYPE_INT;
+                    info.returnType = RETURN_TYPE_INT;
                 } else {
                     returnTypeValid = false;
                 }
@@ -255,22 +304,30 @@ public class Owl {
                     throw new IllegalArgumentException("void, boolean or int is supported for @Delete");
                 }
 
-                owl.queryInfos.put(method, queryInfo);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
             Insert insert = method.getAnnotation(Insert.class);
-            if (insert != null) {
-                queryInfo.query = insert;
-                parseParameters(method, queryInfo, false, true);
+            InsertOrReplace insertOrReplace = method.getAnnotation(InsertOrReplace.class);
+            if (insert != null || insertOrReplace != null) {
+                InsertInfo info = new InsertInfo();
+                info.valueSetter.constantValues = parseConstantValues(method);
+                parseParameters(method, info);
+
+                if (insertOrReplace != null) {
+                    info.conflictAlgorithm = SQLiteDatabase.CONFLICT_REPLACE;
+                } else {
+                    info.conflictAlgorithm = insert.onConflict();
+                }
 
                 Class returnType = method.getReturnType();
                 if (returnType == Void.TYPE || returnType == Void.class) {
-                    queryInfo.returnType = RETURN_TYPE_VOID;
+                    info.returnType = RETURN_TYPE_VOID;
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
-                    queryInfo.returnType = RETURN_TYPE_BOOLEAN;
+                    info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Long.TYPE || returnType == Long.class) {
-                    queryInfo.returnType = RETURN_TYPE_LONG;
+                    info.returnType = RETURN_TYPE_LONG;
                 } else {
                     returnTypeValid = false;
                 }
@@ -278,23 +335,24 @@ public class Owl {
                     throw new IllegalArgumentException("void, boolean or long is supported for @Insert");
                 }
 
-                owl.queryInfos.put(method, queryInfo);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
             Update update = method.getAnnotation(Update.class);
             if (update != null) {
-                queryInfo.query = update;
-                queryInfo.where = update.where();
-                parseParameters(method, queryInfo, true, true);
+                UpdateInfo info = new UpdateInfo();
+                info.selection = update.where();
+                info.valueSetter.constantValues = parseConstantValues(method);
+                parseParameters(method, info);
 
                 Class returnType = method.getReturnType();
                 if (returnType == Void.TYPE || returnType == Void.class) {
-                    queryInfo.returnType = RETURN_TYPE_VOID;
+                    info.returnType = RETURN_TYPE_VOID;
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
-                    queryInfo.returnType = RETURN_TYPE_BOOLEAN;
+                    info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Long.TYPE || returnType == Integer.class) {
-                    queryInfo.returnType = RETURN_TYPE_INT;
+                    info.returnType = RETURN_TYPE_INT;
                 } else {
                     returnTypeValid = false;
                 }
@@ -302,8 +360,7 @@ public class Owl {
                     throw new IllegalArgumentException("void, boolean or int is supported for @Update");
                 }
 
-                owl.queryInfos.put(method, queryInfo);
-//                continue;
+                owl.queryInfos.put(method, info);
             }
         }
 
@@ -311,23 +368,40 @@ public class Owl {
         return owl;
     }
 
-    private static void parseParameters(Method method, QueryInfo queryInfo, boolean where, boolean value) {
+    private static void parseParameters(Method method, QueryInfo queryInfo) {
         Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         int length = parameterAnnotations.length;
-        boolean[] whereTarget = where ? new boolean[length] : null;
-        String[] columnNames = value ? new String[length] : null;
+
+        SelectableQueryInfo selectableQueryInfo = queryInfo instanceof SelectableQueryInfo ? ((SelectableQueryInfo)
+                queryInfo) : null;
+        boolean[] isSelectionArgument;
+        if (selectableQueryInfo != null) {
+            isSelectionArgument = new boolean[length];
+            selectableQueryInfo.isSelectionArgument = isSelectionArgument;
+        } else {
+            isSelectionArgument = null;
+        }
+
+        ValueSettableQueryInfo valueSettableQueryInfo = queryInfo instanceof ValueSettableQueryInfo ? (
+                (ValueSettableQueryInfo) queryInfo) : null;
+        String[] argumentColumnNames;
+        if (valueSettableQueryInfo != null) {
+            argumentColumnNames = new String[length];
+            valueSettableQueryInfo.valueSetter().argumentColumnNames = argumentColumnNames;
+        } else {
+            argumentColumnNames = null;
+        }
+
         for (int i = 0; i < length; i++) {
             Annotation[] annotations = parameterAnnotations[i];
             for (Annotation annotation : annotations) {
-                if (where && (annotation instanceof Where)) {
-                    whereTarget[i] = true;
+                if (isSelectionArgument != null && annotation instanceof Where) {
+                    isSelectionArgument[i] = true;
                 }
-                if (value && (annotation instanceof Value)) {
-                    columnNames[i] = ((Value) annotation).value();
+                if (argumentColumnNames != null && annotation instanceof Value) {
+                    argumentColumnNames[i] = ((Value) annotation).value();
                 }
             }
         }
-        queryInfo.argWhereTarget = whereTarget;
-        queryInfo.argColumnNames = columnNames;
     }
 }
