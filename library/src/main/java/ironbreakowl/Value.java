@@ -6,8 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-public @interface Query {
-    String[] select() default {};
-    String where() default "";
+@Target(ElementType.PARAMETER)
+public @interface Value {
+    String value();
 }

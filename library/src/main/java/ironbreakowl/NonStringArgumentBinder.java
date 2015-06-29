@@ -9,21 +9,24 @@ class NonStringArgumentBinder {
     public String[] selectionArgs;
     public String where;
 
-    public NonStringArgumentBinder(String where, Object[] args) {
+    public NonStringArgumentBinder(String where, Object[] args, boolean[] whereTarget) {
         int selectionArgCount = 0;
         boolean hasNonString = false;
-        for (Object arg : args) {
+        int argLength = args.length;
+        for (int i = 0; i < argLength; i++) {
+            if (!whereTarget[i]) continue;
+            Object arg = args[i];
             if (isNumber(arg) || arg instanceof Boolean) {
                 hasNonString = true;
             } else {
                 ++selectionArgCount;
             }
         }
-        int argLength = args.length;
         if (!hasNonString) {
-            selectionArgs = new String[argLength];
-            for (int i = 0; i < argLength; i++) {
-                selectionArgs[i] = args[i].toString();
+            selectionArgs = new String[selectionArgCount];
+            for (int i = 0, j = 0; i < argLength; i++) {
+                if (!whereTarget[i]) continue;
+                selectionArgs[j++] = args[i].toString();
             }
             this.where = where;
             return;
@@ -40,6 +43,14 @@ class NonStringArgumentBinder {
             if (!"?".equals(s)) {
                 continue;
             }
+
+            while (argIndex < argLength && !whereTarget[argIndex]) {
+                ++argIndex;
+            }
+            if (argIndex >= argLength) {
+                break;
+            }
+
             int start = m.start();
             Object arg = args[argIndex++];
             String stringValue;

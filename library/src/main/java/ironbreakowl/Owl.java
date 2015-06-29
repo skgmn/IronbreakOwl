@@ -14,6 +14,7 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 
 public class Owl {
     private static final int RETURN_TYPE_BOOLEAN = 0;
@@ -26,6 +27,9 @@ public class Owl {
         public int returnType;
         public Class modelClass;
         public Annotation query;
+        public ConstantValues constValues;
+        public boolean[] argWhereTarget;
+        public String[] argColumnNames;
     }
 
     private static final HashMap<Class, Owl> sOwls = new HashMap<>();
@@ -58,14 +62,14 @@ public class Owl {
                     where = null;
                     selectionArgs = null;
                 } else {
-                    NonStringArgumentBinder binder = new NonStringArgumentBinder(where, args);
+                    NonStringArgumentBinder binder = new NonStringArgumentBinder(where, args, queryInfo.argWhereTarget);
                     where = binder.where;
                     selectionArgs = binder.selectionArgs;
                 }
 
                 if (annotation instanceof Query) {
                     Query query = (Query) annotation;
-                    String[] columns = query.columns();
+                    String[] columns = query.select();
                     if (columns.length == 0) {
                         columns = null;
                     }
@@ -97,15 +101,9 @@ public class Owl {
                     }
                 } else if (annotation instanceof Insert) {
                     Insert insert = (Insert) annotation;
-                    String[] columns = insert.columns();
                     int conflictAlgorithm = insert.onConflict();
-                    ContentValues values = makeValues(columns, args);
-                    long retVal;
-                    if (conflictAlgorithm == -1) {
-                        retVal = db.insert(owl.tableName, null, values);
-                    } else {
-                        retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
-                    }
+                    ContentValues values = makeValues(queryInfo.argColumnNames, args, queryInfo.constValues);
+                    long retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_VOID:
                             return null;
@@ -130,7 +128,7 @@ public class Owl {
         }
     }
 
-    static ContentValues makeValues(String[] columns, Object[] args) {
+    static ContentValues makeValues(String[] columns, Object[] args, ConstantValues constValues) {
         int length = args.length;
         if (columns.length != length) {
             throw new IllegalArgumentException("Mismatch: column count = " + columns.length + ", argument count = " +
@@ -139,6 +137,8 @@ public class Owl {
         ContentValues values = new ContentValues();
         for (int i = 0; i < length; i++) {
             String column = columns[i];
+            if (column == null) continue;
+
             Object arg = args[i];
             if (arg == null) {
                 values.putNull(column);
@@ -160,6 +160,17 @@ public class Owl {
                 values.put(column, (Short) arg);
             } else if (arg instanceof String) {
                 values.put(column, (String) arg);
+            }
+        }
+        if (constValues != null) {
+            String[] intKeys = constValues.intKeys();
+            int[] intValues = constValues.intValues();
+            int length2 = intKeys.length;
+            if (length2 != intValues.length) {
+                throw new IllegalArgumentException("intKeys and intValues should have same size");
+            }
+            for (int i = 0; i < length2; i++) {
+                values.put(intKeys[i], intValues[i]);
             }
         }
         return values;
@@ -192,6 +203,15 @@ public class Owl {
         }
     }
 
+    private static int[] toArray(List<Integer> list) {
+        int size = list.size();
+        int[] array = new int[size];
+        for (int i = 0; i < size; i++) {
+            array[i] = list.get(i);
+        }
+        return array;
+    }
+
     private static Owl parseClass(Class clazz) {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
@@ -206,11 +226,13 @@ public class Owl {
         Owl owl = new Owl(tableName);
         for (Method method : clazz.getMethods()) {
             QueryInfo queryInfo = new QueryInfo();
-            boolean returnTypeValid = true;
+            queryInfo.constValues = method.getAnnotation(ConstantValues.class);
 
             Query query = method.getAnnotation(Query.class);
+            boolean returnTypeValid = true;
             if (query != null) {
                 queryInfo.query = query;
+                parseParameters(method, queryInfo, true, false);
 
                 Type returnType = method.getGenericReturnType();
                 if (returnType instanceof ParameterizedType) {
@@ -238,6 +260,7 @@ public class Owl {
             Delete delete = method.getAnnotation(Delete.class);
             if (delete != null) {
                 queryInfo.query = delete;
+                parseParameters(method, queryInfo, true, false);
 
                 Class returnType = method.getReturnType();
                 if (returnType == Void.TYPE || returnType == Void.class) {
@@ -282,5 +305,26 @@ public class Owl {
 
         sOwls.put(clazz, owl);
         return owl;
+    }
+
+    private static void parseParameters(Method method, QueryInfo queryInfo, boolean where, boolean value) {
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        int length = parameterAnnotations.length;
+        boolean[] whereTarget = where ? new boolean[length] : null;
+        String[] columnNames = value ? new String[length] : null;
+        for (int i = 0; i < length; i++) {
+            Annotation[] annotations = parameterAnnotations[i];
+            for (Annotation annotation : annotations) {
+                Class<? extends Annotation> annotationClass = annotation.getClass();
+                if (where && annotationClass == Where.class) {
+                    whereTarget[i] = true;
+                }
+                if (value && annotationClass == Value.class) {
+                    columnNames[i] = ((Value) annotation).value();
+                }
+            }
+        }
+        queryInfo.argWhereTarget = whereTarget;
+        queryInfo.argColumnNames = columnNames;
     }
 }
