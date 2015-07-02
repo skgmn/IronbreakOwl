@@ -277,7 +277,7 @@ public class Owl {
                     returnTypeValid = false;
                 }
                 if (!returnTypeValid) {
-                    throw new IllegalArgumentException("Only Iterable<T> is supported.");
+                    throw new IllegalArgumentException("Supported return types for @Query: Iterable<T>, boolean");
                 }
 
                 owl.queryInfos.put(method, info);
