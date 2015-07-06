@@ -192,7 +192,7 @@ public class Owl {
 
     static ContentValues makeValues(String[] names, Object[] args, @Nullable List<Map.Entry<String, Object>>
             constValues) {
-        int length = args.length;
+        int length = args == null ? 0 : args.length;
         ContentValues values = new ContentValues();
         for (int i = 0; i < length; i++) {
             String column = names[i];
@@ -228,6 +228,7 @@ public class Owl {
         if (values == null) return null;
 
         ArrayList<Map.Entry<String, Object>> list = new ArrayList<>();
+
         String[] intKeys = values.intKeys();
         int[] intValues = values.intValues();
         int length = intKeys.length;
@@ -237,6 +238,12 @@ public class Owl {
         for (int i = 0; i < length; i++) {
             list.add(new AbstractMap.SimpleEntry<String, Object>(intKeys[i], intValues[i]));
         }
+
+        for (String s : values.nullKeys()) {
+            list.add(new AbstractMap.SimpleEntry<>(s, null));
+        }
+
+        list.trimToSize();
         return list;
     }
 

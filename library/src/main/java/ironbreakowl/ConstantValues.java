@@ -8,6 +8,8 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface ConstantValues {
-    String[] intKeys();
-    int[] intValues();
+    String[] intKeys() default {};
+    int[] intValues() default {};
+
+    String[] nullKeys() default {};
 }

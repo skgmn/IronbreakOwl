@@ -12,7 +12,7 @@ class NonStringArgumentBinder {
     public NonStringArgumentBinder(String selection, Object[] args, boolean[] whereTarget) {
         int selectionArgCount = 0;
         boolean hasNonString = false;
-        int argLength = args.length;
+        int argLength = args == null ? 0 : args.length;
         for (int i = 0; i < argLength; i++) {
             if (!whereTarget[i]) continue;
             Object arg = args[i];
