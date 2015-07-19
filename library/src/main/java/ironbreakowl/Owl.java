@@ -15,7 +15,6 @@ import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -115,9 +114,9 @@ public class Owl {
                             return retVal;
                         case RETURN_TYPE_ITERABLE:
                             final Object cursorReader = CursorReader.create(cursor, queryInfo.modelClass);
-                            return new Iterable() {
+                            return new ClosableIterable() {
                                 @Override
-                                public Iterator iterator() {
+                                public ClosableIterator iterator() {
                                     return new CursorIterator(cursor, cursorReader);
                                 }
                             };
@@ -272,7 +271,7 @@ public class Owl {
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
-                    if (rawType == Iterable.class) {
+                    if (rawType == Iterable.class || rawType == ClosableIterable.class) {
                         info.returnType = RETURN_TYPE_ITERABLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
