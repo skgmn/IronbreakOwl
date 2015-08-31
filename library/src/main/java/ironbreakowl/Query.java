@@ -10,4 +10,5 @@ import java.lang.annotation.Target;
 public @interface Query {
     String[] select() default {};
     String where() default "";
+    String orderBy() default "";
 }

@@ -3,8 +3,11 @@ package ironbreakowl;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
@@ -24,6 +27,7 @@ public class Owl {
     private static final int RETURN_TYPE_INT = 2;
     private static final int RETURN_TYPE_VOID = 3;
     private static final int RETURN_TYPE_LONG = 4;
+    private static final int RETURN_TYPE_LIST = 5;
 
     private static class QueryInfo {
         public int returnType;
@@ -46,6 +50,7 @@ public class Owl {
 
     private static class SelectInfo extends SelectableQueryInfo {
         public String[] projection;
+        public String orderBy;
     }
 
     private static class DeleteInfo extends SelectableQueryInfo {
@@ -104,9 +109,9 @@ public class Owl {
                 }
 
                 if (queryInfo instanceof SelectInfo) {
-                    String[] projection = ((SelectInfo) queryInfo).projection;
-                    final Cursor cursor = db.query(owl.tableName, projection, selection, selectionArgs, null, null,
-                            null);
+                    SelectInfo selectInfo = (SelectInfo) queryInfo;
+                    final Cursor cursor = db.query(owl.tableName, selectInfo.projection, selection, selectionArgs, null,
+                            null, selectInfo.orderBy);
                     switch (queryInfo.returnType) {
                         case RETURN_TYPE_BOOLEAN:
                             boolean retVal = cursor.moveToNext();
@@ -120,6 +125,8 @@ public class Owl {
                                     return new CursorIterator(cursor, cursorReader);
                                 }
                             };
+                        case RETURN_TYPE_LIST:
+                            return CursorCollector.collect(cursor, queryInfo.modelClass);
                     }
                 } else if (queryInfo instanceof DeleteInfo) {
                     int affected = db.delete(owl.tableName, selection, selectionArgs);
@@ -186,6 +193,14 @@ public class Owl {
             values.put(column, (Short) value);
         } else if (value instanceof String) {
             values.put(column, (String) value);
+        } else if (value instanceof CharSequence) {
+            values.put(column, value.toString());
+        } else if (value instanceof Parcelable) {
+            Parcel parcel = Parcel.obtain();
+            ((Parcelable) value).writeToParcel(parcel, 0);
+            parcel.setDataPosition(0);
+            byte[] bytes = parcel.marshall();
+            values.put(column, bytes);
         }
     }
 
@@ -208,6 +223,10 @@ public class Owl {
 
     public static String getTableName(Class clazz) {
         return getOwl(clazz).tableName;
+    }
+
+    public static void createTable(SQLiteDatabase db, Class clazz, String... fields) {
+        db.execSQL("create table " + getTableName(clazz) + '(' + TextUtils.join(",", fields) + ')');
     }
 
     @NonNull
@@ -265,6 +284,13 @@ public class Owl {
                 SelectInfo info = new SelectInfo();
                 info.selection = query.where();
                 info.projection = query.select();
+                info.orderBy = query.orderBy();
+                if (info.projection.length == 0) {
+                    info.projection = null;
+                }
+                if (info.orderBy.length() == 0) {
+                    info.orderBy = null;
+                }
                 parseParameters(method, info);
 
                 Type returnType = method.getGenericReturnType();
@@ -273,6 +299,9 @@ public class Owl {
                     Type rawType = pt.getRawType();
                     if (rawType == Iterable.class || rawType == ClosableIterable.class) {
                         info.returnType = RETURN_TYPE_ITERABLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                    } else if (rawType == List.class || rawType == ArrayList.class) {
+                        info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;

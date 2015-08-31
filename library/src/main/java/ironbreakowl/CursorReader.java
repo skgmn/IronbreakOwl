@@ -1,7 +1,10 @@
 package ironbreakowl;
 
 import android.database.Cursor;
+import android.os.Parcel;
+import android.os.Parcelable;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -13,6 +16,7 @@ class CursorReader {
     private static class MethodInfo {
         public Column column;
         public Class returnType;
+        public Parcelable.Creator parcelCreator;
     }
 
     public final HashMap<Method, MethodInfo> methods = new HashMap<>();
@@ -41,6 +45,14 @@ class CursorReader {
                     return cursor.getDouble(columnIndex);
                 } else if (returnType == Short.TYPE || returnType == Short.class) {
                     return cursor.getShort(columnIndex);
+                } else if (Parcelable.class.isAssignableFrom(returnType)) {
+                    Parcel parcel = Parcel.obtain();
+                    byte[] bytes = cursor.getBlob(columnIndex);
+                    parcel.unmarshall(bytes, 0, bytes.length);
+                    parcel.setDataPosition(0);
+                    Object obj = methodInfo.parcelCreator.createFromParcel(parcel);
+                    parcel.recycle();
+                    return obj;
                 } else {
                     throw new IllegalArgumentException("Unsupported type: " + returnType.getCanonicalName());
                 }
@@ -63,7 +75,6 @@ class CursorReader {
         if (!clazz.isInterface()) {
             throw new IllegalArgumentException("Only interface is allowed: " + clazz.getCanonicalName());
         }
-
         CursorReader proxy = new CursorReader();
         HashMap<Method, MethodInfo> methods = proxy.methods;
         for (Method method : clazz.getMethods()) {
@@ -71,8 +82,22 @@ class CursorReader {
             if (column == null) continue;
 
             MethodInfo methodInfo = new MethodInfo();
+            Class<?> returnType = method.getReturnType();
             methodInfo.column = column;
-            methodInfo.returnType = method.getReturnType();
+            methodInfo.returnType = returnType;
+            if (Parcelable.class.isAssignableFrom(returnType)) {
+                try {
+                    Field creatorField = returnType.getField("CREATOR");
+                    creatorField.setAccessible(true);
+                    Parcelable.Creator parcelCreator = (Parcelable.Creator) creatorField.get(returnType);
+                    if (parcelCreator == null) {
+                        throw new NullPointerException();
+                    }
+                    methodInfo.parcelCreator = parcelCreator;
+                } catch (Exception ignored) {
+                    throw new IllegalArgumentException("Cannot find CREATOR for " + returnType.getCanonicalName());
+                }
+            }
             methods.put(method, methodInfo);
         }
         return proxy;
