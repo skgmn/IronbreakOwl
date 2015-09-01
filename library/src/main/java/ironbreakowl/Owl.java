@@ -225,8 +225,14 @@ public class Owl {
         return getOwl(clazz).tableName;
     }
 
-    public static void createTable(SQLiteDatabase db, Class clazz, String... fields) {
-        db.execSQL("create table " + getTableName(clazz) + '(' + TextUtils.join(",", fields) + ')');
+    public static void createTable(SQLiteDatabase db, Class clazz, String... columns) {
+        db.execSQL("create table " + getTableName(clazz) + '(' + TextUtils.join(",", columns) + ')');
+    }
+
+    public static void createIndex(SQLiteDatabase db, Class clazz, String... columns) {
+        String tableName = getTableName(clazz);
+        db.execSQL("create index " + tableName + '_' + TextUtils.join("_", columns) + " on "
+                + tableName + '(' + TextUtils.join(",", columns) + ')');
     }
 
     @NonNull
