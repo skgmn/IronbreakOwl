@@ -126,7 +126,7 @@ public class Owl {
                                 }
                             };
                         case RETURN_TYPE_LIST:
-                            return CursorCollector.collect(cursor, queryInfo.modelClass);
+                            return PlainDataModel.collect(cursor, queryInfo.modelClass);
                     }
                 } else if (queryInfo instanceof DeleteInfo) {
                     int affected = db.delete(owl.tableName, selection, selectionArgs);
@@ -172,7 +172,7 @@ public class Owl {
         });
     }
 
-    private static void putValue(ContentValues values, String column, Object value) {
+    static void putValue(ContentValues values, String column, Object value) {
         if (value == null) {
             values.putNull(column);
         } else if (value instanceof Boolean) {
@@ -201,6 +201,8 @@ public class Owl {
             parcel.setDataPosition(0);
             byte[] bytes = parcel.marshall();
             values.put(column, bytes);
+        } else {
+            PlainDataModel.putInto(values, value);
         }
     }
 
