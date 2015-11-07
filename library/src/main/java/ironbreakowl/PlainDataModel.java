@@ -43,7 +43,7 @@ class PlainDataModel {
                     } else if (type == Short.TYPE || type == Short.class) {
                         values.put(column.value(), field.getShort(o));
                     } else {
-                        Owl.putValue(values, column.value(), field.get(o));
+                        OwlDatabaseOpenHelper.putValue(values, column.value(), field.get(o));
                     }
                 } catch (RuntimeException e) {
                     throw e;

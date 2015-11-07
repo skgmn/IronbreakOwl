@@ -8,6 +8,6 @@ public class OwlTest extends TestCase {
     }
 
     public void testGetTableName() throws Exception {
-        assertEquals("test_owl", Owl.getTableName(TestOwl.class));
+        assertEquals("test_owl", OwlTable.getTableName(TestOwl.class));
     }
 }

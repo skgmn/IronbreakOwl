@@ -9,6 +9,9 @@ class NonStringArgumentBinder {
     public String[] selectionArgs;
     public String selection;
 
+    public NonStringArgumentBinder() {
+    }
+
     public NonStringArgumentBinder(String selection, Object[] args, boolean[] whereTarget) {
         int selectionArgCount = 0;
         boolean hasNonString = false;
