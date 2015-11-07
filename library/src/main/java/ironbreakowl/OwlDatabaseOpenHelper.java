@@ -22,9 +22,12 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
@@ -84,10 +87,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return retVal;
                     case RETURN_TYPE_ITERABLE:
                         final Object cursorReader = CursorReader.create(cursor, modelClass);
-                        return new ClosableIterable() {
+                        final CursorIterator cursorIterator = new CursorIterator(cursor, cursorReader,
+                                OwlDatabaseOpenHelper.this);
+                        return new Iterable() {
                             @Override
                             public ClosableIterator iterator() {
-                                return new CursorIterator(cursor, cursorReader);
+                                return cursorIterator;
                             }
                         };
                     case RETURN_TYPE_LIST:
@@ -197,7 +202,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     private final HashMap<Class, OwlTable> mTables = new HashMap<>();
-    private final ReentrantLock mLock = new ReentrantLock();
+    final ReentrantLock mLock = new ReentrantLock();
+    private final ThreadLocal<Set<CursorIterator>> mCursorIterators = new ThreadLocal<>();
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
         this(context, name, factory, version, null);
@@ -279,7 +285,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
-                    if (rawType == Iterable.class || rawType == ClosableIterable.class) {
+                    if (rawType == Iterable.class) {
                         info.returnType = RETURN_TYPE_ITERABLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else if (rawType == List.class || rawType == ArrayList.class) {
@@ -521,11 +527,45 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         mLock.unlock();
     }
 
-    public void lock() {
-        mLock.lock();
+    @Override
+    public SQLiteDatabase getReadableDatabase() {
+        SQLiteDatabase db = super.getReadableDatabase();
+        //noinspection deprecation
+        db.setLockingEnabled(false);
+        return db;
     }
 
-    public void unlock() {
-        mLock.unlock();
+    @Override
+    public SQLiteDatabase getWritableDatabase() {
+        SQLiteDatabase db = super.getWritableDatabase();
+        //noinspection deprecation
+        db.setLockingEnabled(false);
+        return db;
+    }
+
+    void addCursorIterator(CursorIterator it) {
+        Set<CursorIterator> set = mCursorIterators.get();
+        if (set == null) {
+            set = Collections.newSetFromMap(new WeakHashMap<CursorIterator, Boolean>());
+            mCursorIterators.set(set);
+        }
+        set.add(it);
+    }
+
+    void removeCursorIterator(CursorIterator it) {
+        Set<CursorIterator> set = mCursorIterators.get();
+        if (set != null) {
+            set.remove(it);
+        }
+    }
+
+    public void closeCursors() {
+        Set<CursorIterator> set = mCursorIterators.get();
+        if (set != null) {
+            for (CursorIterator it : set) {
+                it.close();
+            }
+            set.clear();
+        }
     }
 }
