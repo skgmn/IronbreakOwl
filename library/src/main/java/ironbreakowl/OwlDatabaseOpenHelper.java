@@ -15,6 +15,7 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -204,15 +205,22 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private final HashMap<Class, OwlTable> mTables = new HashMap<>();
     final ReentrantLock mLock = new ReentrantLock();
     private final ThreadLocal<Set<CursorIterator>> mCursorIterators = new ThreadLocal<>();
+    private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
-        this(context, name, factory, version, null);
+        super(context, name, factory, version); // Don't call this(...)
+        init();
     }
 
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version,
                                  DatabaseErrorHandler errorHandler) {
         super(context, name, factory, version, errorHandler);
+        init();
+    }
+
+    private void init() {
+        getWritableDatabase(); // Make the locking disabled
     }
 
     public <T> T getTable(Class<T> clazz) {
@@ -527,19 +535,32 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         mLock.unlock();
     }
 
+    public void setTransactionSuccessful() {
+        getWritableDatabase().setTransactionSuccessful();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void setLockingDisabled(SQLiteDatabase db) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) return;
+        SQLiteDatabase lockingDisabledDatabase = mLockingDisabledDatabase == null ? null :
+                mLockingDisabledDatabase.get();
+        if (lockingDisabledDatabase != db) {
+            db.setLockingEnabled(false);
+            mLockingDisabledDatabase = new WeakReference<>(db);
+        }
+    }
+
     @Override
     public SQLiteDatabase getReadableDatabase() {
         SQLiteDatabase db = super.getReadableDatabase();
-        //noinspection deprecation
-        db.setLockingEnabled(false);
+        setLockingDisabled(db);
         return db;
     }
 
     @Override
     public SQLiteDatabase getWritableDatabase() {
         SQLiteDatabase db = super.getWritableDatabase();
-        //noinspection deprecation
-        db.setLockingEnabled(false);
+        setLockingDisabled(db);
         return db;
     }
 
