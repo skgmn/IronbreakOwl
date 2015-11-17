@@ -59,43 +59,7 @@ class PlainDataModel {
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
             try {
-                T obj = clazz.newInstance();
-                for (Pair<Field, FieldInfo> pair : collector.fields) {
-                    Field field = pair.first;
-                    FieldInfo fieldInfo = pair.second;
-                    String columnName = fieldInfo.column.value();
-                    int columnIndex = cursor.getColumnIndex(columnName);
-                    Class type = fieldInfo.type;
-                    if (type == Integer.TYPE || type == Integer.class) {
-                        field.setInt(obj, cursor.getInt(columnIndex));
-                    } else if (type == String.class) {
-                        field.set(obj, cursor.getString(columnIndex));
-                    } else if (type == Long.TYPE || type == Long.class) {
-                        field.setLong(obj, cursor.getLong(columnIndex));
-                    } else if (type == byte[].class) {
-                        field.set(obj, cursor.getBlob(columnIndex));
-                    } else if (type == Float.TYPE || type == Float.class) {
-                        field.setFloat(obj, cursor.getFloat(columnIndex));
-                    } else if (type == Double.TYPE || type == Double.class) {
-                        field.setDouble(obj, cursor.getDouble(columnIndex));
-                    } else if (type == Short.TYPE || type == Short.class) {
-                        field.setShort(obj, cursor.getShort(columnIndex));
-                    } else if (Parcelable.class.isAssignableFrom(type)) {
-                        Parcelable.Creator parcelCreator = fieldInfo.parcelCreator;
-                        if (parcelCreator == null) {
-                            throw new IllegalArgumentException("Cannot find CREATOR for " + type.getCanonicalName());
-                        } else {
-                            Parcel parcel = Parcel.obtain();
-                            byte[] bytes = cursor.getBlob(columnIndex);
-                            parcel.unmarshall(bytes, 0, bytes.length);
-                            parcel.setDataPosition(0);
-                            field.set(obj, parcelCreator.createFromParcel(parcel));
-                            parcel.recycle();
-                        }
-                    } else {
-                        throw new IllegalArgumentException("Unsupported type: " + type.getCanonicalName());
-                    }
-                }
+                T obj = fetchRow(cursor, clazz, collector);
                 list.add(obj);
             } catch (RuntimeException e) {
                 throw e;
@@ -104,6 +68,56 @@ class PlainDataModel {
             }
         }
         return list;
+    }
+
+    public static <T> Single<T> readSingle(final Cursor cursor, Class<T> clazz) {
+        final PlainDataModel collector = getModel(clazz);
+        if (cursor.moveToNext()) {
+            try {
+                return Single.of(fetchRow(cursor, clazz, collector));
+            } catch (Exception e) {
+                return Single.empty();
+            }
+        } else {
+            return Single.empty();
+        }
+    }
+
+    private static <T> T fetchRow(Cursor cursor, Class<T> clazz, PlainDataModel collector)
+            throws InstantiationException, IllegalAccessException {
+        T obj = clazz.newInstance();
+        for (Pair<Field, FieldInfo> pair : collector.fields) {
+            Field field = pair.first;
+            FieldInfo fieldInfo = pair.second;
+            String columnName = fieldInfo.column.value();
+            int columnIndex = cursor.getColumnIndex(columnName);
+            Class type = fieldInfo.type;
+            if (type == Integer.TYPE || type == Integer.class) {
+                field.setInt(obj, cursor.getInt(columnIndex));
+            } else if (type == String.class) {
+                field.set(obj, cursor.getString(columnIndex));
+            } else if (type == Long.TYPE || type == Long.class) {
+                field.setLong(obj, cursor.getLong(columnIndex));
+            } else if (type == byte[].class) {
+                field.set(obj, cursor.getBlob(columnIndex));
+            } else if (type == Float.TYPE || type == Float.class) {
+                field.setFloat(obj, cursor.getFloat(columnIndex));
+            } else if (type == Double.TYPE || type == Double.class) {
+                field.setDouble(obj, cursor.getDouble(columnIndex));
+            } else if (type == Short.TYPE || type == Short.class) {
+                field.setShort(obj, cursor.getShort(columnIndex));
+            } else if (Parcelable.class.isAssignableFrom(type)) {
+                Parcel parcel = Parcel.obtain();
+                byte[] bytes = cursor.getBlob(columnIndex);
+                parcel.unmarshall(bytes, 0, bytes.length);
+                parcel.setDataPosition(0);
+                field.set(obj, fieldInfo.parcelCreator.createFromParcel(parcel));
+                parcel.recycle();
+            } else {
+                throw new IllegalArgumentException("Unsupported type: " + type.getCanonicalName());
+            }
+        }
+        return obj;
     }
 
     private static PlainDataModel getModel(Class clazz) {
@@ -142,7 +156,7 @@ class PlainDataModel {
                             throw new NullPointerException();
                         }
                         fieldInfo.parcelCreator = parcelCreator;
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
                         throw new IllegalArgumentException("Cannot find CREATOR for " + fieldType.getCanonicalName());
                     }
                 }

@@ -38,6 +38,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_VOID = 3;
     private static final int RETURN_TYPE_LONG = 4;
     private static final int RETURN_TYPE_LIST = 5;
+    private static final int RETURN_TYPE_SINGLE = 6;
 
     static abstract class QueryInfo {
         public int returnType;
@@ -86,6 +87,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         boolean retVal = cursor.moveToNext();
                         cursor.close();
                         return retVal;
+                    case RETURN_TYPE_INT:
+                        int count = cursor.getCount();
+                        cursor.close();
+                        return count;
                     case RETURN_TYPE_ITERABLE:
                         final Object cursorReader = CursorReader.create(cursor, modelClass);
                         final CursorIterator cursorIterator = new CursorIterator(cursor, cursorReader,
@@ -97,13 +102,41 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                             }
                         };
                     case RETURN_TYPE_LIST:
-                        return PlainDataModel.collect(cursor, modelClass);
+                        ArrayList list = PlainDataModel.collect(cursor, modelClass);
+                        cursor.close();
+                        return list;
+                    case RETURN_TYPE_SINGLE:
+                        if (isPrimitiveWrapper(modelClass)) {
+                            Single value;
+                            if (cursor.moveToNext()) {
+                                value = Single.of(CursorUtils.readValue(cursor, 0, modelClass, null));
+                            } else {
+                                value = Single.empty();
+                            }
+                            cursor.close();
+                            return value;
+                        } else {
+                            Single value = PlainDataModel.readSingle(cursor, modelClass);
+                            cursor.close();
+                            return value;
+                        }
                 }
             } finally {
                 mLock.unlock();
             }
             return null;
         }
+    }
+
+    static boolean isPrimitiveWrapper(Class clazz) {
+        return clazz == Boolean.class ||
+                clazz == Character.class ||
+                clazz == Byte.class ||
+                clazz == Short.class ||
+                clazz == Integer.class ||
+                clazz == Long.class ||
+                clazz == Float.class ||
+                clazz == Double.class;
     }
 
     class DeleteInfo extends SelectableQueryInfo {
@@ -299,11 +332,20 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     } else if (rawType == List.class || rawType == ArrayList.class) {
                         info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                    } else if (rawType == Single.class) {
+                        if (info.projection.length != 1) {
+                            throw new IllegalArgumentException(
+                                    "select attribute should contain only 1 column when the return type is Single");
+                        }
+                        info.returnType = RETURN_TYPE_SINGLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;
                     }
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
                     info.returnType = RETURN_TYPE_BOOLEAN;
+                } else if (returnType == Integer.TYPE || returnType == Integer.class) {
+                    info.returnType = RETURN_TYPE_INT;
                 } else {
                     returnTypeValid = false;
                 }
