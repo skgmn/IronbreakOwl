@@ -112,18 +112,33 @@ List<PersonData> getPeople(@Where String name, @Where int age);
 A method annotated by <code>@Query</code> supports several return types.
 
 1. List<T>
-   - When the return type is <code>List</code>, the method reads all data from <code>Cursor</code> at once and collect them into a <code>List</code>. In this case, <code>T</code> should be a POJO class which fields are annotated by <code>@Column</code>.
-```java
-public class PersonData {
-    @Column(PersonTable.ID)
-    public int id;
+   - When the return type is <code>List</code>, the method reads all data from <code>Cursor</code> at once and collect them into a <code>List</code>. In this case, <code>T</code> should be a POJO class of which fields are annotated by <code>@Column</code>.
+   ```java
+   public class PersonData {
+       @Column(PersonTable.ID)
+       public int id;
     
-    @Column(PersonTable.NAME)
-    public String name;
-}
-```
+       @Column(PersonTable.NAME)
+       public String name;
+   }
+   ```
 2. Iterable<T>
-   - When the return type is <code>Iterable</code> the method returns an <code>Iterable</code> object which iterates <code>Cursor</code>. 
+   - When the return type is <code>Iterable</code>, the method returns an <code>Iterable</code> object which iterates <code>Cursor</code>. In this case, <code>T</code> should be a reader interface of which methods are annotated by <code>@Column</code>.
+   - Each method of a reader should contain no parameters, and should have return type which correspond to data type.
+   ```java
+   public interface PersonReader {
+       @Column(PersonTable.NAME)
+       String name();
+    
+       @Column(PersonTable.AGE)
+       int age();
+    
+       @Column(PersonTable.GENDER)
+       String gender();
+   }
+   ```
+   - Reader do not read value from <code>Cursor</code> until any method of it is called.
 3. Single<T>
+   - When the return type is <code>ironbreakowl.Single</code>, the method reads the first tuple from <Code>Cursor</code> and return it wrapped by <code>Single</code>. A value can be fetched by <code>Single.getValue()</code> while the existence can be checked by inspecting <code>Single.hasValue()</code>.
 4. int
 5. boolean
