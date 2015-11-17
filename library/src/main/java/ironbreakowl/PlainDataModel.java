@@ -31,20 +31,7 @@ class PlainDataModel {
                     Field field = entry.first;
                     FieldInfo info = entry.second;
                     Column column = info.column;
-                    Class type = info.type;
-                    if (type == Integer.TYPE || type == Integer.class) {
-                        values.put(column.value(), field.getInt(o));
-                    } else if (type == Long.TYPE || type == Long.class) {
-                        values.put(column.value(), field.getLong(o));
-                    } else if (type == Float.TYPE || type == Float.class) {
-                        values.put(column.value(), field.getFloat(o));
-                    } else if (type == Double.TYPE || type == Double.class) {
-                        values.put(column.value(), field.getDouble(o));
-                    } else if (type == Short.TYPE || type == Short.class) {
-                        values.put(column.value(), field.getShort(o));
-                    } else {
-                        OwlDatabaseOpenHelper.putValue(values, column.value(), field.get(o));
-                    }
+                    OwlUtils.putValue(values, column.value(), field.get(o));
                 } catch (RuntimeException e) {
                     throw e;
                 } catch (Exception e) {
@@ -100,6 +87,8 @@ class PlainDataModel {
                 field.setLong(obj, cursor.getLong(columnIndex));
             } else if (type == byte[].class) {
                 field.set(obj, cursor.getBlob(columnIndex));
+            } else if (type == Boolean.TYPE || type == Boolean.class) {
+                field.setBoolean(obj, cursor.getInt(columnIndex) != 0);
             } else if (type == Float.TYPE || type == Float.class) {
                 field.setFloat(obj, cursor.getFloat(columnIndex));
             } else if (type == Double.TYPE || type == Double.class) {

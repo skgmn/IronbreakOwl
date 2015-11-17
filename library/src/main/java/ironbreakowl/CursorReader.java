@@ -29,7 +29,7 @@ class CursorReader {
                 String columnName = methodInfo.column.value();
                 Class returnType = methodInfo.returnType;
                 int columnIndex = cursor.getColumnIndex(columnName);
-                return CursorUtils.readValue(cursor, columnIndex, returnType, methodInfo.parcelCreator);
+                return OwlUtils.readValue(cursor, columnIndex, returnType, methodInfo.parcelCreator);
             }
         });
     }
@@ -60,7 +60,7 @@ class CursorReader {
             methodInfo.column = column;
             methodInfo.returnType = returnType;
             if (Parcelable.class.isAssignableFrom(returnType)) {
-                methodInfo.parcelCreator = ReflectionUtils.getParcelCreator(returnType);
+                methodInfo.parcelCreator = OwlUtils.getParcelCreator(returnType);
             }
             methods.put(method, methodInfo);
         }

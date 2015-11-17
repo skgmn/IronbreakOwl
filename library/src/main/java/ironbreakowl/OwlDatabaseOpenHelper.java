@@ -8,8 +8,6 @@ import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Build;
-import android.os.Parcel;
-import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
@@ -109,7 +107,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         if (isPrimitiveWrapper(modelClass)) {
                             Single value;
                             if (cursor.moveToNext()) {
-                                value = Single.of(CursorUtils.readValue(cursor, 0, modelClass, null));
+                                value = Single.of(OwlUtils.readValue(cursor, 0, modelClass, null));
                             } else {
                                 value = Single.empty();
                             }
@@ -485,48 +483,14 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         for (int i = 0; i < length; i++) {
             String column = names[i];
             if (column == null) continue;
-            putValue(values, column, args[i]);
+            OwlUtils.putValue(values, column, args[i]);
         }
         if (constValues != null) {
             for (Map.Entry<String, Object> entry : constValues) {
-                putValue(values, entry.getKey(), entry.getValue());
+                OwlUtils.putValue(values, entry.getKey(), entry.getValue());
             }
         }
         return values;
-    }
-
-    static void putValue(ContentValues values, String column, Object value) {
-        if (value == null) {
-            values.putNull(column);
-        } else if (value instanceof Boolean) {
-            values.put(column, (Boolean) value);
-        } else if (value instanceof Byte) {
-            values.put(column, (Byte) value);
-        } else if (value instanceof byte[]) {
-            values.put(column, (byte[]) value);
-        } else if (value instanceof Double) {
-            values.put(column, (Double) value);
-        } else if (value instanceof Float) {
-            values.put(column, (Float) value);
-        } else if (value instanceof Integer) {
-            values.put(column, (Integer) value);
-        } else if (value instanceof Long) {
-            values.put(column, (Long) value);
-        } else if (value instanceof Short) {
-            values.put(column, (Short) value);
-        } else if (value instanceof String) {
-            values.put(column, (String) value);
-        } else if (value instanceof CharSequence) {
-            values.put(column, value.toString());
-        } else if (value instanceof Parcelable) {
-            Parcel parcel = Parcel.obtain();
-            ((Parcelable) value).writeToParcel(parcel, 0);
-            parcel.setDataPosition(0);
-            byte[] bytes = parcel.marshall();
-            values.put(column, bytes);
-        } else {
-            PlainDataModel.putInto(values, value);
-        }
     }
 
     static List<Map.Entry<String, Object>> parseConstantValues(Method method) {
