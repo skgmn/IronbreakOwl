@@ -7,13 +7,13 @@ IronbreakOwl is a library that provides SQLite query mapping on Android. It can 
 ```java
 @Table("person")
 public interface PersonTable {
-    public static final String ID = "id";
-    public static final String NAME = "name";
-    public static final String AGE = "age";
-    public static final String GENDER = "gender";
+    String ID = "id";
+    String NAME = "name";
+    String AGE = "age";
+    String GENDER = "gender";
     
-    public static final String GENDER_MALE = "male";
-    public static final String GENDER_FEMALE = "female";
+    String GENDER_MALE = "male";
+    String GENDER_FEMALE = "female";
 
     @Query(select = {ID, NAME, AGE, GENDER}, where = AGE + ">=?")
     Iterable<PersonReader> findPeopleOlderThan(@Where int age);
@@ -91,6 +91,13 @@ public class MainActivity extends Activity {
 }
 ```
 
+## Features
+
+* Mapping each query to a method
+* Thread safe
+* <code>Iterable</code> interface can be used to iterate <code>Cursor</code> by for-each loop
+* Supports <code>Parcelable</code>, <code>boolean</code> as a data type
+
 ## Queries
 
 ### Select
@@ -116,6 +123,7 @@ public class PersonData {
 }
 ```
 2. Iterable<T>
-3. Optional<T>
+   - When the return type is <code>Iterable</code> the method returns an <code>Iterable</code> object which iterates <code>Cursor</code>. 
+3. Single<T>
 4. int
 5. boolean
