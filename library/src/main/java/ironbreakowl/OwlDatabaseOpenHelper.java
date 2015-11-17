@@ -8,6 +8,7 @@ import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Build;
+import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
@@ -37,6 +38,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_LONG = 4;
     private static final int RETURN_TYPE_LIST = 5;
     private static final int RETURN_TYPE_SINGLE = 6;
+
+    protected static final String PRIMARY_KEY = "primary key";
+    protected static final String AUTO_INCREMENT = "autoincrement";
+    protected static final String NOT_NULL = "not null";
+    protected static final String DEFAULT_NULL = "default null";
 
     static abstract class QueryInfo {
         public int returnType;
@@ -529,6 +535,33 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         String tableName = getTableName(clazz);
         db.execSQL("create index " + tableName + '_' + TextUtils.join("_", columns) + " on "
                 + tableName + '(' + TextUtils.join(",", columns) + ')');
+    }
+
+    protected static String column(String name, Class dataType, String... attributes) {
+        String dataTypeString;
+        if (dataType == Boolean.TYPE || dataType == Boolean.class ||
+                dataType == Integer.TYPE || dataType == Integer.class ||
+                dataType == Long.TYPE || dataType == Long.class) {
+            dataTypeString = "integer";
+        } else if (dataType == String.class) {
+            dataTypeString = "text";
+        } else if (dataType == byte[].class || Parcelable.class.isAssignableFrom(dataType)) {
+            dataTypeString = "blob";
+        } else if (dataType == Float.TYPE || dataType == Float.class ||
+                dataType == Double.TYPE || dataType == Double.class) {
+            dataTypeString = "real";
+        } else {
+            throw new IllegalArgumentException("Unsupported type: " + dataType.getName());
+        }
+        return name + " " + dataTypeString + " " + TextUtils.join(" ", attributes);
+    }
+
+    protected static String defaultValue(long value) {
+        return "default " + value;
+    }
+
+    protected static String defaultValue(String strValue) {
+        return "default " + strValue.replaceAll("'", "''");
     }
 
     public void beginTransaction() {
