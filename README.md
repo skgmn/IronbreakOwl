@@ -2,7 +2,7 @@
 
 ![](http://media-hearth.cursecdn.com/avatars/147/679/500.png)
 
-IronbreakOwl is a library that provides SQLite query mapping. It can be used like this:
+IronbreakOwl is a library that provides SQLite query mapping on Android. It can be used like this:
 
 ```java
 @Table("person")
@@ -90,3 +90,32 @@ public class MainActivity extends Activity {
     }
 }
 ```
+
+## Queries
+
+### Select
+
+<code>select</code> query can be annotated by <code>@Query</code>.
+
+```java
+@Query(select = {ID, NAME}, where = NAME + "=? or " + AGE + "=?", orderBy = ADDRESS + " desc")
+List<PersonData> getPeople(@Where String name, @Where int age);
+```
+
+A method annotated by <code>@Query</code> supports several return types.
+
+1. List<T>
+   - When the return type is <code>List</code>, the method reads all data from <code>Cursor</code> at once and collect them into a <code>List</code>. In this case, <code>T</code> should be a POJO class which fields are annotated by <code>@Column</code>.
+```java
+public class PersonData {
+    @Column(PersonTable.ID)
+    public int id;
+    
+    @Column(PersonTable.NAME)
+    public String name;
+}
+```
+2. Iterable<T>
+3. Optional<T>
+4. int
+5. boolean
