@@ -621,6 +621,13 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return "default " + escape(strValue);
     }
 
+    protected static String primaryKey(String... columns) {
+        if (columns.length == 0) {
+            throw new IllegalArgumentException("No columns were provided as primary key");
+        }
+        return "primary key (" + TextUtils.join(",", columns) + ")";
+    }
+
     private static String escape(String s) {
         return "'" + s.replaceAll("'", "''") + "'";
     }
