@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
@@ -43,6 +45,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
     protected static final String DEFAULT_NULL = "default null";
+
+    private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
+            Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
 
     static abstract class QueryInfo {
         public int returnType;
@@ -315,7 +320,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             boolean returnTypeValid = true;
             if (query != null) {
                 SelectInfo info = new SelectInfo();
-                info.selection = query.where();
+                info.selection = buildPredicate(query.where(), method.getAnnotation(ConstantWhere.class));
                 info.projection = query.select();
                 info.orderBy = query.orderBy();
                 if (info.projection.length == 0) {
@@ -364,7 +369,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             Delete delete = method.getAnnotation(Delete.class);
             if (delete != null) {
                 DeleteInfo info = new DeleteInfo();
-                info.selection = delete.where();
+                info.selection = buildPredicate(delete.where(), method.getAnnotation(ConstantWhere.class));
                 parseParameters(method, info);
 
                 Class returnType = method.getReturnType();
@@ -419,7 +424,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             Update update = method.getAnnotation(Update.class);
             if (update != null) {
                 UpdateInfo info = new UpdateInfo();
-                info.selection = update.where();
+                info.selection = buildPredicate(update.where(), method.getAnnotation(ConstantWhere.class));
                 info.valueSetter.constantValues = parseConstantValues(method);
                 parseParameters(method, info);
 
@@ -443,6 +448,38 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         mTables.put(clazz, owl);
         return owl;
+    }
+
+    static String buildPredicate(String predicate, ConstantWhere annotation) {
+        if (annotation == null) {
+            return predicate;
+        }
+        int indexString = 0;
+        int indexInteger = 0;
+        int indexBoolean = 0;
+        Matcher m = PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING.matcher(predicate);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String replacement;
+            String group = m.group();
+            switch (group) {
+                case "%d":
+                    replacement = String.valueOf(annotation.ints()[indexInteger++]);
+                    break;
+                case "%s":
+                    replacement = escape(annotation.strings()[indexString++]);
+                    break;
+                case "%b":
+                    replacement = annotation.booleans()[indexBoolean++] ? "1" : "0";
+                    break;
+                default:
+                    replacement = group;
+                    break;
+            }
+            m.appendReplacement(sb, replacement);
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private static void parseParameters(Method method, QueryInfo queryInfo) {
@@ -581,7 +618,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     protected static String defaultValue(String strValue) {
-        return "default " + strValue.replaceAll("'", "''");
+        return "default " + escape(strValue);
+    }
+
+    private static String escape(String s) {
+        return s.replaceAll("'", "''");
     }
 
     public void beginTransaction() {
