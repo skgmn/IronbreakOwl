@@ -26,8 +26,8 @@ public interface PersonTable {
     @Update(where = NAME + "=?")
     void updateAge(@Where String name, @Value(AGE) int age);
     
-    @Delete(where = GENDER + "='" + GENDER_MALE + "'")
-    void destroyMales();
+    @Delete(where = GENDER + "=?")
+    void exterminateGender(@Where String gender);
 }
 
 public interface PersonReader {
@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
             // ...
         }
 
-        personTable.destroyMales();
+        personTable.exterminateGender(PersonTable.GENDER_MALE);
     }
 }
 ```
@@ -227,8 +227,16 @@ This is actually not so elegant form but as far as I know, it is still the best 
 <code>DELETE</code> query can be annotated by <code>@Delete</code>.
 
 ```java
-@Delete(where = GENDER + "='" + GENDER_MALE + "'")
-void destroyMales();
+@Delete(where = GENDER + "=?")
+void exterminateGender(@Where String gender);
+```
+
+<code>@ConstantWhere</code> can be used to insert constant value into <code>where</code> clause. In this case, _%d_, _%s_, or _%b_ is used instead of question mark.
+
+```java
+@Delete(where = GENDER + "=%s")
+@ConstantWhere(strings = PersonTable.GENDER_MALE)
+void exterminateMale();
 ```
 
 #### Supported return types
