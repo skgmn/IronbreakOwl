@@ -622,7 +622,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     private static String escape(String s) {
-        return s.replaceAll("'", "''");
+        return "'" + s.replaceAll("'", "''") + "'";
     }
 
     public void beginTransaction() {
