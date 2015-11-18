@@ -19,9 +19,9 @@ public interface PersonTable {
     Iterable<PersonReader> findPeopleOlderThan(@Where int age);
     
     @Insert
-    void createNewPerson(@Value(NAME) String name, 
-                         @Value(AGE) int age,
-                         @Value(GENDER) String gender);
+    void addNewPerson(@Value(NAME) String name, 
+                      @Value(AGE) int age,
+                      @Value(GENDER) String gender);
     
     @Update(where = NAME + "=?")
     void updateAge(@Where String name, @Value(AGE) int age);
@@ -52,10 +52,10 @@ public class DatabaseOpenHelper extends OwlDatabaseOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         createTable(db, PersonTable.class,
-                PersonTable.ID + " integer primary key autoincrement not null",
-                PersonTable.NAME + " varchar not null",
-                PersonTable.AGE + " integer not null",
-                PersonTable.GENDER = " varchar not null");
+                column(PersonTable.ID, Long.class, PRIMARY_KEY, AUTO_INCREMENT, NOT_NULL),
+                column(PersonTable.NAME, String.class, NOT_NULL),
+                column(PersonTable.AGE, Integer.TYPE, NOT_NULL),
+                column(PersonTable.GENDER, String.class, NOT_NULL));
     }
     
     @Override
@@ -72,9 +72,9 @@ public class MainActivity extends Activity {
         mDb = new DatabseOpenHelper(this);
         
         PersonTable personTable = mDb.getTable(PersonTable.class);
-        personTable.createNewPerson("John", 24, PersonTable.GENDER_MALE);
-        personTable.createNewPerson("Mary", 18, PersonTable.GENDER_FEMALE);
-        personTable.createNewPerson("Tom", 32, PersonTable.GENDER_MALE);
+        personTable.addNewPerson("John", 24, PersonTable.GENDER_MALE);
+        personTable.addNewPerson("Mary", 18, PersonTable.GENDER_FEMALE);
+        personTable.addNewPerson("Tom", 32, PersonTable.GENDER_MALE);
         
         personTable.updateAge("Mary", 26);
 
@@ -100,19 +100,21 @@ public class MainActivity extends Activity {
 
 ## Queries
 
-### Select
+### SELECT
 
-<code>select</code> query can be annotated by <code>@Query</code>.
+<code>SELECT</code> query can be annotated by <code>@Query</code>.
 
 ```java
 @Query(select = {ID, NAME}, where = NAME + "=? or " + AGE + "=?", orderBy = ADDRESS + " desc")
 List<PersonData> getPeople(@Where String name, @Where int age);
 ```
 
-A method annotated by <code>@Query</code> supports several return types.
+Attributes are optional.
+
+#### Supported return types
 
 1. List<T>
-   - When the return type is <code>List</code>, the method reads all data from <code>Cursor</code> at once and collect them into a <code>List</code>. In this case, <code>T</code> should be a POJO class of which fields are annotated by <code>@Column</code>.
+   - When return type is <code>List</code>, method reads all data from <code>Cursor</code> at once and collect them into a <code>List</code>. In this case, <code>T</code> should be a POJO class of which fields are annotated by <code>@Column</code>.
    ```java
    public class PersonData {
        @Column(PersonTable.ID)
@@ -123,7 +125,7 @@ A method annotated by <code>@Query</code> supports several return types.
    }
    ```
 2. Iterable<T>
-   - When the return type is <code>Iterable</code>, the method returns an <code>Iterable</code> object which iterates <code>Cursor</code>. In this case, <code>T</code> should be a reader interface of which methods are annotated by <code>@Column</code>.
+   - When return type is <code>Iterable</code>, method returns an <code>Iterable</code> object which iterates <code>Cursor</code>. In this case, <code>T</code> should be a reader interface of which methods are annotated by <code>@Column</code>.
    - Each method of a reader should contain no parameters, and should have return type which correspond to data type.
    ```java
    public interface PersonReader {
@@ -137,8 +139,30 @@ A method annotated by <code>@Query</code> supports several return types.
        String gender();
    }
    ```
-   - Reader do not read value from <code>Cursor</code> until any method of it is called.
+   - Reader do not read value from <code>Cursor</code> until a method is called.
+   - Closing cursor
+     - <code>Cursor.close()</code> is automatically called when <code>Iterable.hasNext()</code> becomes <code>false</code>.
+     - When a loop does not continue until <code>Iterable.hasNext()</code> become <code>false</code> (such like when <code>break</code> is called during loop), it is **vital** to call <code>OwlDatabaseOpenHelper.closeCursors()</code>. This method close all the cursors which are opened from the current thread.
 3. Single<T>
-   - When the return type is <code>ironbreakowl.Single</code>, the method reads the first tuple from <Code>Cursor</code> and return it wrapped by <code>Single</code>. A value can be fetched by <code>Single.getValue()</code> while the existence can be checked by inspecting <code>Single.hasValue()</code>.
+   - When return type is <code>Single</code> (from package <code>ironbreakowl</code>), method reads the first tuple from <Code>Cursor</code> and return it with <code>Single</code> object wrapped. A value can be fetched by <code>Single.getValue()</code> while the existence can be checked by inspecting <code>Single.hasValue()</code>.
 4. int
+   - When return type is <code>int</code> or <code>Integer</code>, method just returns <code>Cursor.getCount()</code>.
 5. boolean
+   - When return type is <code>boolean</code> or <code>Boolean</code>, method returns <code>Cursor.moveToNext()</code>, which means if there is any data satisfying conditions of a query.
+
+### INSERT
+
+<code>INSERT</code> query can be annotated by <code>@Insert</code>.
+
+```java
+@Insert(onConflict = SQLiteDatabase.CONFLICT_IGNORE)
+void addNewPerson(@Value(NAME) String name, @VALUE int age);
+```
+
+#### Supported return types
+
+1. void
+2. boolean
+   - Returns if the query is successful.
+3. long
+   - Returns count of affected rows.
