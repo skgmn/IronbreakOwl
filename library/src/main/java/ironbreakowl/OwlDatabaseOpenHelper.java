@@ -505,14 +505,34 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         ArrayList<Map.Entry<String, Object>> list = new ArrayList<>();
 
-        String[] intKeys = values.intKeys();
+        String[] keys = values.intKeys();
         int[] intValues = values.intValues();
-        int length = intKeys.length;
+        int length = keys.length;
         if (length != intValues.length) {
             throw new IllegalArgumentException("intKeys.length should be equal to intValues.length");
         }
         for (int i = 0; i < length; i++) {
-            list.add(new AbstractMap.SimpleEntry<String, Object>(intKeys[i], intValues[i]));
+            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], intValues[i]));
+        }
+
+        keys = values.stringKeys();
+        String[] stringValues = values.stringValues();
+        length = keys.length;
+        if (length != stringValues.length) {
+            throw new IllegalArgumentException("stringKeys.length should be equal to stringValues.length");
+        }
+        for (int i = 0; i < length; i++) {
+            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], stringValues[i]));
+        }
+
+        keys = values.booleanKeys();
+        boolean[] booleanValues = values.booleanValues();
+        length = keys.length;
+        if (length != booleanValues.length) {
+            throw new IllegalArgumentException("booleanKeys.length should be equal to booleanValues.length");
+        }
+        for (int i = 0; i < length; i++) {
+            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], booleanValues[i]));
         }
 
         for (String s : values.nullKeys()) {
