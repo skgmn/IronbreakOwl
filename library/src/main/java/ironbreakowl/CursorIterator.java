@@ -2,7 +2,9 @@ package ironbreakowl;
 
 import android.database.Cursor;
 
-class CursorIterator implements ClosableIterator {
+import java.util.Iterator;
+
+class CursorIterator implements Iterator {
     private Cursor mCursor;
     private Object mCursorReader;
     private final OwlDatabaseOpenHelper mOpenHelper;
@@ -24,7 +26,7 @@ class CursorIterator implements ClosableIterator {
         }
         boolean hasNext = mCursor.moveToNext();
         if (!hasNext) {
-            close();
+            close(true);
         }
         return hasNext;
     }
@@ -42,19 +44,20 @@ class CursorIterator implements ClosableIterator {
     @Override
     protected void finalize() throws Throwable {
         try {
-            close();
+            close(false);
         } finally {
             super.finalize();
         }
     }
 
-    @Override
-    public void close() {
+    void close(boolean unlock) {
         if (mCursor != null) {
             mCursor.close();
             mCursor = null;
             mOpenHelper.removeCursorIterator(this);
-            mOpenHelper.mLock.unlock();
+            if (unlock) {
+                mOpenHelper.mLock.unlock();
+            }
         }
     }
 }

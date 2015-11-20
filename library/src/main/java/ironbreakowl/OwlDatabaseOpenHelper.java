@@ -22,12 +22,12 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -106,7 +106,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                                 OwlDatabaseOpenHelper.this);
                         return new Iterable() {
                             @Override
-                            public ClosableIterator iterator() {
+                            public Iterator iterator() {
                                 return cursorIterator;
                             }
                         };
@@ -674,7 +674,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     void addCursorIterator(CursorIterator it) {
         Set<CursorIterator> set = mCursorIterators.get();
         if (set == null) {
-            set = Collections.newSetFromMap(new WeakHashMap<CursorIterator, Boolean>());
+            set = new HashSet<>();
             mCursorIterators.set(set);
         }
         set.add(it);
@@ -691,7 +691,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         Set<CursorIterator> set = mCursorIterators.get();
         if (set != null) {
             for (CursorIterator it : set) {
-                it.close();
+                it.close(true);
             }
             set.clear();
         }
