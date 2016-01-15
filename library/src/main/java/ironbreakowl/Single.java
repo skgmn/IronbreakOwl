@@ -1,20 +1,12 @@
 package ironbreakowl;
 
 public class Single<T> {
-    private final T mValue;
-    private final boolean mHasValue;
+    public final T value;
+    public final boolean hasValue;
 
     private Single(T value, boolean hasValue) {
-        mValue = value;
-        mHasValue = hasValue;
-    }
-
-    public T getValue() {
-        return mValue;
-    }
-
-    public boolean hasValue() {
-        return mHasValue;
+        this.value = value;
+        this.hasValue = hasValue;
     }
 
     public static <T> Single<T> of(T value) {

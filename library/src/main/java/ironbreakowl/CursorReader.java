@@ -11,9 +11,14 @@ import java.util.HashMap;
 class CursorReader {
     private static final HashMap<Class, CursorReader> sReaders = new HashMap<>();
 
+    private static final int LOGIC_READ_VALUE = 0;
+    private static final int LOGIC_INVESTIGATE_NULL = 1;
+    private static final int LOGIC_INVESTIGATE_NOT_NULL = 2;
+
     private static class MethodInfo {
         public Column column;
         public Class returnType;
+        public int logic;
         public Parcelable.Creator parcelCreator;
     }
 
@@ -29,7 +34,20 @@ class CursorReader {
                 String columnName = methodInfo.column.value();
                 Class returnType = methodInfo.returnType;
                 int columnIndex = cursor.getColumnIndex(columnName);
-                return OwlUtils.readValue(cursor, columnIndex, returnType, methodInfo.parcelCreator);
+                int logic = methodInfo.logic;
+                switch (logic) {
+                    case LOGIC_READ_VALUE:
+                    default:
+                        return OwlUtils.readValue(cursor, columnIndex, returnType, methodInfo.parcelCreator);
+                    case LOGIC_INVESTIGATE_NULL:
+                    case LOGIC_INVESTIGATE_NOT_NULL:
+                        if (returnType != Boolean.TYPE && returnType != Boolean.class) {
+                            throw new IllegalArgumentException("Only boolean type is allowed for @IsNull or " +
+                                    "@IsNotNull");
+                        }
+                        boolean isNull = cursor.isNull(columnIndex);
+                        return logic == LOGIC_INVESTIGATE_NULL ? isNull : !isNull;
+                }
             }
         });
     }
@@ -62,6 +80,15 @@ class CursorReader {
             if (Parcelable.class.isAssignableFrom(returnType)) {
                 methodInfo.parcelCreator = OwlUtils.getParcelCreator(returnType);
             }
+
+            if (method.isAnnotationPresent(IsNull.class)) {
+                methodInfo.logic = LOGIC_INVESTIGATE_NULL;
+            } else if (method.isAnnotationPresent(IsNotNull.class)) {
+                methodInfo.logic = LOGIC_INVESTIGATE_NOT_NULL;
+            } else {
+                methodInfo.logic = LOGIC_READ_VALUE;
+            }
+
             methods.put(method, methodInfo);
         }
         return proxy;

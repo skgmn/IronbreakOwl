@@ -8,7 +8,7 @@ import android.support.annotation.Nullable;
 
 import java.lang.reflect.Field;
 
-public class OwlUtils {
+class OwlUtils {
     public static Object readValue(Cursor cursor, int columnIndex, Class clazz,
                                    @Nullable Parcelable.Creator parcelCreator) {
         if (clazz == Integer.TYPE || clazz == Integer.class) {
@@ -86,6 +86,11 @@ public class OwlUtils {
             parcel.setDataPosition(0);
             byte[] bytes = parcel.marshall();
             values.put(column, bytes);
+        } else if (value instanceof Single) {
+            Single optionalValue = (Single) value;
+            if (optionalValue.hasValue) {
+                putValue(values, column, optionalValue.value);
+            }
         } else {
             PlainDataModel.putInto(values, value);
         }
