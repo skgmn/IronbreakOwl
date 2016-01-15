@@ -10,7 +10,6 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Build;
 import android.os.Parcelable;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
@@ -72,6 +71,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     static class ValueSetter {
         public String[] argumentColumnNames;
+        public boolean[] optional;
         public List<Map.Entry<String, Object>> constantValues;
     }
 
@@ -185,7 +185,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             mLock.lock();
             try {
                 SQLiteDatabase db = getWritableDatabase();
-                ContentValues values = makeValues(valueSetter.argumentColumnNames, args, valueSetter.constantValues);
+                ContentValues values = makeValues(valueSetter, args);
                 long retVal = db.insertWithOnConflict(owl.mTableName, null, values, conflictAlgorithm);
                 switch (returnType) {
                     case RETURN_TYPE_VOID:
@@ -216,7 +216,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             mLock.lock();
             try {
                 SQLiteDatabase db = getWritableDatabase();
-                ContentValues values = makeValues(valueSetter.argumentColumnNames, args, valueSetter.constantValues);
+                ContentValues values = makeValues(valueSetter, args);
                 int retVal = db.update(owl.mTableName, values, argBinder.selection, argBinder.selectionArgs);
                 switch (returnType) {
                     case RETURN_TYPE_VOID:
@@ -499,11 +499,16 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         ValueSettableQueryInfo valueSettableQueryInfo = queryInfo instanceof ValueSettableQueryInfo ? (
                 (ValueSettableQueryInfo) queryInfo) : null;
         String[] argumentColumnNames;
+        boolean[] optional;
         if (valueSettableQueryInfo != null) {
             argumentColumnNames = new String[length];
-            valueSettableQueryInfo.valueSetter().argumentColumnNames = argumentColumnNames;
+            optional = new boolean[length];
+            ValueSetter valueSetter = valueSettableQueryInfo.valueSetter();
+            valueSetter.argumentColumnNames = argumentColumnNames;
+            valueSetter.optional = optional;
         } else {
             argumentColumnNames = null;
+            optional = null;
         }
 
         for (int i = 0; i < length; i++) {
@@ -515,18 +520,29 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (argumentColumnNames != null && annotation instanceof Value) {
                     argumentColumnNames[i] = ((Value) annotation).value();
                 }
+                if (optional != null && annotation instanceof Optional) {
+                    optional[i] = true;
+                }
             }
         }
     }
 
-    static ContentValues makeValues(String[] names, Object[] args, @Nullable List<Map.Entry<String, Object>>
-            constValues) {
+    static ContentValues makeValues(ValueSetter valueSetter, Object[] args) {
+        String[] names = valueSetter.argumentColumnNames;
+        boolean[] optional = valueSetter.optional;
+        List<Map.Entry<String, Object>> constValues = valueSetter.constantValues;
+
         int length = args == null ? 0 : args.length;
         ContentValues values = new ContentValues();
         for (int i = 0; i < length; i++) {
             String column = names[i];
             if (column == null) continue;
-            OwlUtils.putValue(values, column, args[i]);
+
+            boolean isOptional = optional[i];
+            Object value = args[i];
+            if (!isOptional || value != null) {
+                OwlUtils.putValue(values, column, value);
+            }
         }
         if (constValues != null) {
             for (Map.Entry<String, Object> entry : constValues) {
