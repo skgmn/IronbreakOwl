@@ -284,6 +284,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                                 }
                             });
                     owl.tableInterface = tableInterface;
+                } else {
+                    tableInterface = owl.tableInterface;
                 }
             }
         }
