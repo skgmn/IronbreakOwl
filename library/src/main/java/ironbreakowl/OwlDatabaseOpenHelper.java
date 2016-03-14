@@ -22,18 +22,18 @@ import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import rx.Observable;
+import rx.Subscriber;
+
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
-    private static final int RETURN_TYPE_ITERABLE = 1;
+    private static final int RETURN_TYPE_OBSERVABLE = 1;
     private static final int RETURN_TYPE_INT = 2;
     private static final int RETURN_TYPE_VOID = 3;
     private static final int RETURN_TYPE_LONG = 4;
@@ -47,6 +47,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
+
+    private static Boolean sHasRxJava;
 
     static abstract class QueryInfo {
         public int returnType;
@@ -100,16 +102,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         int count = cursor.getCount();
                         cursor.close();
                         return count;
-                    case RETURN_TYPE_ITERABLE:
+                    case RETURN_TYPE_OBSERVABLE:
                         final Object cursorReader = CursorReader.create(cursor, modelClass);
-                        final CursorIterator cursorIterator = new CursorIterator(cursor, cursorReader,
-                                OwlDatabaseOpenHelper.this);
-                        return new Iterable() {
-                            @Override
-                            public Iterator iterator() {
-                                return cursorIterator;
-                            }
-                        };
+                        return newCursorObservable(cursor, cursorReader);
                     case RETURN_TYPE_LIST:
                         ArrayList list = PlainDataModel.collect(cursor, modelClass);
                         cursor.close();
@@ -246,7 +241,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     private final HashMap<Class, OwlTable> mTables = new HashMap<>();
     final ReentrantLock mLock = new ReentrantLock();
-    private final ThreadLocal<Set<CursorIterator>> mCursorIterators = new ThreadLocal<>();
     private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
@@ -337,10 +331,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
-                    if (rawType == Iterable.class) {
-                        info.returnType = RETURN_TYPE_ITERABLE;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
-                    } else if (rawType == List.class || rawType == ArrayList.class) {
+                    if (rawType == List.class || rawType == ArrayList.class) {
                         info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else if (rawType == Single.class) {
@@ -349,6 +340,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                                     "select attribute should contain only 1 column when the return type is Single");
                         }
                         info.returnType = RETURN_TYPE_SINGLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                    } else if (hasRxJava() && rawType == Observable.class) {
+                        info.returnType = RETURN_TYPE_OBSERVABLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;
@@ -689,29 +683,39 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return db;
     }
 
-    void addCursorIterator(CursorIterator it) {
-        Set<CursorIterator> set = mCursorIterators.get();
-        if (set == null) {
-            set = new HashSet<>();
-            mCursorIterators.set(set);
-        }
-        set.add(it);
-    }
-
-    void removeCursorIterator(CursorIterator it) {
-        Set<CursorIterator> set = mCursorIterators.get();
-        if (set != null) {
-            set.remove(it);
-        }
-    }
-
-    public void closeCursors() {
-        Set<CursorIterator> set = mCursorIterators.get();
-        if (set != null) {
-            for (CursorIterator it : set) {
-                it.close(true);
+    private static boolean hasRxJava() {
+        if (sHasRxJava == null) {
+            try {
+                Class.forName(Observable.class.getCanonicalName());
+                sHasRxJava = true;
+            } catch (Throwable e) {
+                sHasRxJava = false;
             }
-            set.clear();
         }
+        return sHasRxJava;
+    }
+
+    <T> Observable<T> newCursorObservable(final Cursor cursor, final Object reader) {
+        if (cursor == null) {
+            return Observable.empty();
+        }
+        return Observable.create(new Observable.OnSubscribe<T>() {
+            @Override
+            public void call(Subscriber<? super T> subscriber) {
+                mLock.lock();
+                try {
+                    while (!subscriber.isUnsubscribed() && cursor.moveToNext()) {
+                        //noinspection unchecked
+                        subscriber.onNext((T) reader);
+                    }
+                    subscriber.onCompleted();
+                } catch (Throwable e) {
+                    subscriber.onError(e);
+                } finally {
+                    cursor.close();
+                    mLock.unlock();
+                }
+            }
+        });
     }
 }
