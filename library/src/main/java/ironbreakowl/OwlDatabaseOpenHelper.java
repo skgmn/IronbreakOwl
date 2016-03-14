@@ -704,7 +704,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             public void call(Subscriber<? super T> subscriber) {
                 mLock.lock();
                 try {
-                    while (cursor.moveToNext()) {
+                    while (!subscriber.isUnsubscribed() && cursor.moveToNext()) {
                         //noinspection unchecked
                         subscriber.onNext((T) reader);
                     }
@@ -712,6 +712,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 } catch (Throwable e) {
                     subscriber.onError(e);
                 } finally {
+                    cursor.close();
                     mLock.unlock();
                 }
             }
