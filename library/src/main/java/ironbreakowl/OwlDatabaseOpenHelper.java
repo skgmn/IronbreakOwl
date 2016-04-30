@@ -134,7 +134,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 clazz == Integer.class ||
                 clazz == Long.class ||
                 clazz == Float.class ||
-                clazz == Double.class;
+                clazz == Double.class ||
+                clazz == byte[].class;
     }
 
     class DeleteInfo extends SelectableQueryInfo {
