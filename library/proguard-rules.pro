@@ -15,3 +15,8 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+-keepclassmembers class * implements ironbreakowl.DataReader {
+    public boolean next();
+    public void close();
+}

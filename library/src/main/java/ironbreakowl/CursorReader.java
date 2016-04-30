@@ -30,6 +30,17 @@ class CursorReader {
         return (T) Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                if ("next".equals(method.getName())
+                        && method.getParameterTypes().length == 0
+                        && method.getReturnType() == Boolean.TYPE) {
+                    return cursor.moveToNext();
+                }
+                if ("close".equals(method.getName())
+                        && method.getParameterTypes().length == 0
+                        && method.getReturnType() == Void.TYPE) {
+                    cursor.close();
+                    return null;
+                }
                 MethodInfo methodInfo = cr.methods.get(method);
                 String columnName = methodInfo.column.value();
                 Class returnType = methodInfo.returnType;
@@ -46,7 +57,7 @@ class CursorReader {
                                     "@IsNotNull");
                         }
                         boolean isNull = cursor.isNull(columnIndex);
-                        return logic == LOGIC_INVESTIGATE_NULL ? isNull : !isNull;
+                        return (logic == LOGIC_INVESTIGATE_NULL) == isNull;
                 }
             }
         });

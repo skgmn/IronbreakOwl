@@ -28,12 +28,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import rx.Observable;
-import rx.Subscriber;
-
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
-    private static final int RETURN_TYPE_OBSERVABLE = 1;
+    private static final int RETURN_TYPE_DATA_READER = 1;
     private static final int RETURN_TYPE_INT = 2;
     private static final int RETURN_TYPE_VOID = 3;
     private static final int RETURN_TYPE_LONG = 4;
@@ -47,8 +44,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
-
-    private static Boolean sHasRxJava;
 
     static abstract class QueryInfo {
         public int returnType;
@@ -102,9 +97,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         int count = cursor.getCount();
                         cursor.close();
                         return count;
-                    case RETURN_TYPE_OBSERVABLE:
-                        final Object cursorReader = CursorReader.create(cursor, modelClass);
-                        return newCursorObservable(cursor, cursorReader);
+                    case RETURN_TYPE_DATA_READER:
+                        return CursorReader.create(cursor, modelClass);
                     case RETURN_TYPE_LIST:
                         ArrayList list = PlainDataModel.collect(cursor, modelClass);
                         cursor.close();
@@ -341,12 +335,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         }
                         info.returnType = RETURN_TYPE_SINGLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
-                    } else if (hasRxJava() && rawType == Observable.class) {
-                        info.returnType = RETURN_TYPE_OBSERVABLE;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;
                     }
+                } else if (returnType instanceof Class && DataReader.class.isAssignableFrom((Class<?>) returnType)) {
+                    info.returnType = RETURN_TYPE_DATA_READER;
+                    info.modelClass = (Class) returnType;
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
                     info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Integer.TYPE || returnType == Integer.class) {
@@ -681,41 +675,5 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = super.getWritableDatabase();
         setLockingDisabled(db);
         return db;
-    }
-
-    private static boolean hasRxJava() {
-        if (sHasRxJava == null) {
-            try {
-                Class.forName(Observable.class.getCanonicalName());
-                sHasRxJava = true;
-            } catch (Throwable e) {
-                sHasRxJava = false;
-            }
-        }
-        return sHasRxJava;
-    }
-
-    <T> Observable<T> newCursorObservable(final Cursor cursor, final Object reader) {
-        if (cursor == null) {
-            return Observable.empty();
-        }
-        return Observable.create(new Observable.OnSubscribe<T>() {
-            @Override
-            public void call(Subscriber<? super T> subscriber) {
-                mLock.lock();
-                try {
-                    while (!subscriber.isUnsubscribed() && cursor.moveToNext()) {
-                        //noinspection unchecked
-                        subscriber.onNext((T) reader);
-                    }
-                    subscriber.onCompleted();
-                } catch (Throwable e) {
-                    subscriber.onError(e);
-                } finally {
-                    cursor.close();
-                    mLock.unlock();
-                }
-            }
-        });
     }
 }
