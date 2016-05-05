@@ -16,7 +16,17 @@
 #   public *;
 #}
 
--keepclassmembers class * implements ironbreakowl.DataReader {
+-keepclassmembers interface ironbreakowl.DataReader {
+    boolean next();
+    void close();
+}
+
+-keepclassmembers interface ** extends ironbreakowl.DataReader {
+    boolean next();
+    void close();
+}
+
+-keepclassmembers class ** implements ironbreakowl.DataReader {
     public boolean next();
     public void close();
 }
