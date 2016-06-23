@@ -45,6 +45,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     protected static final String NOT_NULL = "not null";
     protected static final String DEFAULT_NULL = "default null";
 
+    private static final int PARAMETER_TYPE_UNKNOWN = 0;
+    private static final int PARAMETER_TYPE_SELECTION_ARGUMENT = 1;
+    private static final int PARAMETER_TYPE_PASSED_PARAMETER = 2;
+
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
 
@@ -82,6 +86,20 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     class SelectInfo extends SelectableQueryInfo {
         public String[] projection;
         public String orderBy;
+        public String[] passedParameterNames;
+
+        private Map<String, Object> buildPassedParameters(Object[] args) {
+            Map<String, Object> params = new HashMap<>(args.length);
+            if (passedParameterNames != null) {
+                int length = passedParameterNames.length;
+                for (int i = 0; i < length; i++) {
+                    String name = passedParameterNames[i];
+                    if (name == null) continue;
+                    params.put(name, args[i]);
+                }
+            }
+            return params;
+        }
 
         @Override
         public Object query(OwlTable owl, Object[] args) {
@@ -103,11 +121,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     case RETURN_TYPE_DATA_READER:
                         return CursorReader.create(cursor, modelClass);
                     case RETURN_TYPE_LIST:
-                        ArrayList list = PlainDataModel.collect(cursor, modelClass);
+                        ArrayList list = PlainDataModel.collect(cursor, modelClass, buildPassedParameters(args));
                         cursor.close();
                         return list;
                     case RETURN_TYPE_OBSERVABLE:
-                        return PlainDataModel.observe(cursor, modelClass);
+                        return PlainDataModel.observe(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_SINGLE:
                         if (isPrimitiveWrapper(modelClass)) {
                             Single value;
@@ -119,7 +137,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                             cursor.close();
                             return value;
                         } else {
-                            Single value = PlainDataModel.readSingle(cursor, modelClass);
+                            Single value = PlainDataModel.readSingle(cursor, modelClass, buildPassedParameters(args));
                             cursor.close();
                             return value;
                         }
@@ -328,6 +346,21 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     info.orderBy = null;
                 }
                 parseParameters(method, info);
+
+                Annotation[][] annotations = method.getParameterAnnotations();
+                int length = annotations.length;
+                if (length != 0) {
+                    info.passedParameterNames = new String[length];
+                    for (int i = 0; i < length; ++i) {
+                        Annotation[] parameterAnnotations = annotations[i];
+                        for (Annotation annotation : parameterAnnotations) {
+                            if (annotation instanceof DecoderParam) {
+                                info.passedParameterNames[i] = ((DecoderParam) annotation).value();
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 Type returnType = method.getGenericReturnType();
                 if (returnType instanceof ParameterizedType) {
