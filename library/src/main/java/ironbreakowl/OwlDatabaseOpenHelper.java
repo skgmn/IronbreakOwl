@@ -89,16 +89,18 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         public String[] passedParameterNames;
 
         private Map<String, Object> buildPassedParameters(Object[] args) {
-            Map<String, Object> params = new HashMap<>(args.length);
             if (passedParameterNames != null) {
+                Map<String, Object> params = new HashMap<>(args.length);
                 int length = passedParameterNames.length;
                 for (int i = 0; i < length; i++) {
                     String name = passedParameterNames[i];
                     if (name == null) continue;
                     params.put(name, args[i]);
                 }
+                return params;
+            } else {
+                return null;
             }
-            return params;
         }
 
         @Override

@@ -116,7 +116,7 @@ class PlainDataModel {
                 int length = parameters != null ? parameters.length : passedParameterNames.length;
                 Object[] params = new Object[length];
                 for (int i = 0; i < length; ++i) {
-                    if (passedParameterNames != null) {
+                    if (passedParameterNames != null && passedParameters != null) {
                         String passedParameterName = passedParameterNames[i];
                         if (passedParameterName != null) {
                             params[i] = passedParameters.get(passedParameterName);
