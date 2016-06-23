@@ -11,6 +11,8 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import rx.Observable;
+
 class PlainDataModel {
     private static final HashMap<Class, PlainDataModel> sCollectors = new HashMap<>();
 
@@ -55,6 +57,29 @@ class PlainDataModel {
             }
         }
         return list;
+    }
+
+    public static <T> Observable<T> observe(final Cursor cursor, Class<T> clazz) {
+        final PlainDataModel collector = getModel(clazz);
+        return Observable.create(subscriber -> {
+            try {
+                while (cursor.moveToNext()) {
+                    try {
+                        T obj = fetchRow(cursor, clazz, collector);
+                        subscriber.onNext(obj);
+                    } catch (RuntimeException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            } catch (Throwable e) {
+                subscriber.onError(e);
+            } finally {
+                cursor.close();
+                subscriber.onCompleted();
+            }
+        });
     }
 
     public static <T> Single<T> readSingle(final Cursor cursor, Class<T> clazz) {

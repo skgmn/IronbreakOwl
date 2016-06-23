@@ -28,6 +28,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import rx.Observable;
+
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
     private static final int RETURN_TYPE_DATA_READER = 1;
@@ -36,6 +38,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_LONG = 4;
     private static final int RETURN_TYPE_LIST = 5;
     private static final int RETURN_TYPE_SINGLE = 6;
+    private static final int RETURN_TYPE_OBSERVABLE = 7;
 
     protected static final String PRIMARY_KEY = "primary key";
     protected static final String AUTO_INCREMENT = "autoincrement";
@@ -103,6 +106,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         ArrayList list = PlainDataModel.collect(cursor, modelClass);
                         cursor.close();
                         return list;
+                    case RETURN_TYPE_OBSERVABLE:
+                        return PlainDataModel.observe(cursor, modelClass);
                     case RETURN_TYPE_SINGLE:
                         if (isPrimitiveWrapper(modelClass)) {
                             Single value;
@@ -234,6 +239,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
+    private static Boolean sHasRxJava;
+
     private final HashMap<Class, OwlTable> mTables = new HashMap<>();
     final ReentrantLock mLock = new ReentrantLock();
     private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
@@ -335,6 +342,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                                     "select attribute should contain only 1 column when the return type is Single");
                         }
                         info.returnType = RETURN_TYPE_SINGLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                    } else if (isObservable(rawType)) {
+                        info.returnType = RETURN_TYPE_OBSERVABLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else {
                         returnTypeValid = false;
@@ -439,6 +449,18 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         mTables.put(clazz, owl);
         return owl;
+    }
+
+    private static boolean isObservable(Type type) {
+        if (sHasRxJava == null) {
+            try {
+                Class.forName(Observable.class.getName());
+                sHasRxJava = true;
+            } catch (Throwable e) {
+                sHasRxJava = false;
+            }
+        }
+        return sHasRxJava && type == Observable.class;
     }
 
     static String buildPredicate(String predicate, ConstantWhere annotation) {
