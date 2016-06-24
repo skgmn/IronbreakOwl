@@ -356,8 +356,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     for (int i = 0; i < length; ++i) {
                         Annotation[] parameterAnnotations = annotations[i];
                         for (Annotation annotation : parameterAnnotations) {
-                            if (annotation instanceof DecoderParam) {
-                                info.passedParameterNames[i] = ((DecoderParam) annotation).value();
+                            if (annotation instanceof Parameter) {
+                                info.passedParameterNames[i] = ((Parameter) annotation).value();
                                 break;
                             }
                         }

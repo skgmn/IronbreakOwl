@@ -203,7 +203,7 @@ class PlainDataModel {
             if (!isEligible) {
                 for (Annotation[] parameterAnnotations : annotations) {
                     for (Annotation annotation : parameterAnnotations) {
-                        if (annotation instanceof DecoderParam || annotation instanceof Column) {
+                        if (annotation instanceof Parameter || annotation instanceof Column) {
                             isEligible = true;
                             break;
                         }
@@ -220,12 +220,12 @@ class PlainDataModel {
                     Annotation[] parameterAnnotations = annotations[i];
                     boolean unknown = true;
                     for (Annotation annotation : parameterAnnotations) {
-                        if (annotation instanceof DecoderParam) {
+                        if (annotation instanceof Parameter) {
                             unknown = false;
                             if (collector.passedParameterNames == null) {
                                 collector.passedParameterNames = new String[length];
                             }
-                            collector.passedParameterNames[i] = ((DecoderParam) annotation).value();
+                            collector.passedParameterNames[i] = ((Parameter) annotation).value();
                         } else if (annotation instanceof Column) {
                             unknown = false;
                             if (collector.parameters == null) {
