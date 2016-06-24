@@ -76,16 +76,17 @@ class PlainDataModel {
         final PlainDataModel collector = getModel(clazz);
         return Observable.create(subscriber -> {
             try {
-                while (cursor.moveToNext()) {
+                while (cursor.moveToNext() && !subscriber.isUnsubscribed()) {
                     T obj = fetchRow(cursor, collector, passedParameters);
                     subscriber.onNext(obj);
                 }
             } catch (Throwable e) {
                 subscriber.onError(e);
+                return;
             } finally {
                 cursor.close();
-                subscriber.onCompleted();
             }
+            subscriber.onCompleted();
         });
     }
 
