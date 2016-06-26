@@ -11,22 +11,34 @@ import java.lang.reflect.Field;
 class OwlUtils {
     public static Object readValue(Cursor cursor, int columnIndex, Class clazz,
                                    @Nullable Parcelable.Creator parcelCreator) {
-        if (clazz == Integer.TYPE || clazz == Integer.class) {
+        if (clazz == Integer.TYPE) {
             return cursor.getInt(columnIndex);
+        } else if (clazz == Integer.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex);
         } else if (clazz == String.class) {
             return cursor.getString(columnIndex);
-        } else if (clazz == Long.TYPE || clazz == Long.class) {
+        } else if (clazz == Long.TYPE) {
             return cursor.getLong(columnIndex);
-        } else if (clazz == Boolean.TYPE || clazz == Boolean.class) {
+        } else if (clazz == Long.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex);
+        } else if (clazz == Boolean.TYPE) {
             return cursor.getInt(columnIndex) != 0;
+        } else if (clazz == Boolean.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0;
         } else if (clazz == byte[].class) {
             return cursor.getBlob(columnIndex);
-        } else if (clazz == Float.TYPE || clazz == Float.class) {
+        } else if (clazz == Float.TYPE) {
             return cursor.getFloat(columnIndex);
-        } else if (clazz == Double.TYPE || clazz == Double.class) {
+        } else if (clazz == Float.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex);
+        } else if (clazz == Double.TYPE) {
             return cursor.getDouble(columnIndex);
-        } else if (clazz == Short.TYPE || clazz == Short.class) {
+        } else if (clazz == Double.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex);
+        } else if (clazz == Short.TYPE) {
             return cursor.getShort(columnIndex);
+        } else if (clazz == Short.class) {
+            return cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex);
         } else if (Parcelable.class.isAssignableFrom(clazz)) {
             Parcel parcel = Parcel.obtain();
             byte[] bytes = cursor.getBlob(columnIndex);

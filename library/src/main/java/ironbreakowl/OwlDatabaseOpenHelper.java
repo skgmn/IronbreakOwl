@@ -372,12 +372,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else if (rawType == Single.class) {
-                        if (info.projection.length != 1) {
+                        info.returnType = RETURN_TYPE_SINGLE;
+                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                        if (isPrimitiveWrapper(info.modelClass) && info.projection.length != 1) {
                             throw new IllegalArgumentException(
                                     "select attribute should contain only 1 column when the return type is Single");
                         }
-                        info.returnType = RETURN_TYPE_SINGLE;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
                     } else if (isObservable(rawType)) {
                         info.returnType = RETURN_TYPE_OBSERVABLE;
                         info.modelClass = (Class) pt.getActualTypeArguments()[0];

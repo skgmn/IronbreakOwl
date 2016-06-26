@@ -149,22 +149,34 @@ class PlainDataModel {
             String columnName = fieldInfo.column.value();
             int columnIndex = cursor.getColumnIndex(columnName);
             Class type = fieldInfo.type;
-            if (type == Integer.TYPE || type == Integer.class) {
+            if (type == Integer.TYPE) {
                 field.setInt(obj, cursor.getInt(columnIndex));
+            } else if (type == Integer.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex));
             } else if (type == String.class) {
                 field.set(obj, cursor.getString(columnIndex));
-            } else if (type == Long.TYPE || type == Long.class) {
+            } else if (type == Long.TYPE) {
                 field.setLong(obj, cursor.getLong(columnIndex));
+            } else if (type == Long.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex));
             } else if (type == byte[].class) {
                 field.set(obj, cursor.getBlob(columnIndex));
-            } else if (type == Boolean.TYPE || type == Boolean.class) {
+            } else if (type == Boolean.TYPE) {
                 field.setBoolean(obj, cursor.getInt(columnIndex) != 0);
-            } else if (type == Float.TYPE || type == Float.class) {
+            } else if (type == Boolean.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0);
+            } else if (type == Float.TYPE) {
                 field.setFloat(obj, cursor.getFloat(columnIndex));
-            } else if (type == Double.TYPE || type == Double.class) {
+            } else if (type == Float.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex));
+            } else if (type == Double.TYPE) {
                 field.setDouble(obj, cursor.getDouble(columnIndex));
-            } else if (type == Short.TYPE || type == Short.class) {
+            } else if (type == Double.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex));
+            } else if (type == Short.TYPE) {
                 field.setShort(obj, cursor.getShort(columnIndex));
+            } else if (type == Short.class) {
+                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex));
             } else if (Parcelable.class.isAssignableFrom(type)) {
                 Parcel parcel = Parcel.obtain();
                 byte[] bytes = cursor.getBlob(columnIndex);
@@ -239,7 +251,8 @@ class PlainDataModel {
                         }
                     }
                     if (unknown) {
-                        throw new IllegalArgumentException("All parameter should be annotated with @DecoderParam or @Column");
+                        throw new IllegalArgumentException("All parameter should be annotated with @DecoderParam or " +
+                                "@Column");
                     }
                 }
             }
