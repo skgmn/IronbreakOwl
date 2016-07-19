@@ -658,6 +658,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 + tableName + '(' + TextUtils.join(",", columns) + ')');
     }
 
+    public void addColumn(SQLiteDatabase db, Class clazz, String name, Class dataType) {
+        String tableName = getTableName(clazz);
+        db.execSQL("alter table " + tableName + " add column " + column(name, dataType));
+    }
+
     protected static String column(String name, Class dataType, String... attributes) {
         String dataTypeString;
         if (dataType == Boolean.TYPE || dataType == Boolean.class ||
