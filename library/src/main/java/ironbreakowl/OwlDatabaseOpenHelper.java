@@ -370,17 +370,17 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     Type rawType = pt.getRawType();
                     if (rawType == List.class || rawType == ArrayList.class) {
                         info.returnType = RETURN_TYPE_LIST;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
                     } else if (rawType == Single.class) {
                         info.returnType = RETURN_TYPE_SINGLE;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
                         if (isPrimitiveWrapper(info.modelClass) && info.projection.length != 1) {
                             throw new IllegalArgumentException(
                                     "select attribute should contain only 1 column when the return type is Single");
                         }
                     } else if (isObservable(rawType)) {
                         info.returnType = RETURN_TYPE_OBSERVABLE;
-                        info.modelClass = (Class) pt.getActualTypeArguments()[0];
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
                     } else {
                         returnTypeValid = false;
                     }
@@ -613,7 +613,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             throw new IllegalArgumentException("intKeys.length should be equal to intValues.length");
         }
         for (int i = 0; i < length; i++) {
-            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], intValues[i]));
+            list.add(new AbstractMap.SimpleEntry<>(keys[i], intValues[i]));
         }
 
         keys = values.stringKeys();
@@ -623,7 +623,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             throw new IllegalArgumentException("stringKeys.length should be equal to stringValues.length");
         }
         for (int i = 0; i < length; i++) {
-            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], stringValues[i]));
+            list.add(new AbstractMap.SimpleEntry<>(keys[i], stringValues[i]));
         }
 
         keys = values.booleanKeys();
@@ -633,7 +633,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             throw new IllegalArgumentException("booleanKeys.length should be equal to booleanValues.length");
         }
         for (int i = 0; i < length; i++) {
-            list.add(new AbstractMap.SimpleEntry<String, Object>(keys[i], booleanValues[i]));
+            list.add(new AbstractMap.SimpleEntry<>(keys[i], booleanValues[i]));
         }
 
         for (String s : values.nullKeys()) {
