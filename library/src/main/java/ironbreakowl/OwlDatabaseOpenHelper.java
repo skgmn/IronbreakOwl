@@ -128,9 +128,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         cursor.close();
                         return list;
                     case RETURN_TYPE_OLD_OBSERVABLE:
-                        return PlainDataModel.toFlowable(cursor, modelClass, buildPassedParameters(args));
-                    case RETURN_TYPE_FLOWABLE:
                         return PlainDataModel.toOldObservable(cursor, modelClass, buildPassedParameters(args));
+                    case RETURN_TYPE_FLOWABLE:
+                        return PlainDataModel.toFlowable(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_SINGLE:
                         if (isPrimitiveWrapper(modelClass)) {
                             Single value;
