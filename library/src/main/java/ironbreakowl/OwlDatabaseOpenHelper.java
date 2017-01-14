@@ -26,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.reactivex.Flowable;
+import io.reactivex.Maybe;
 import rx.Observable;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
@@ -34,9 +35,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_VOID = 2;
     private static final int RETURN_TYPE_LONG = 3;
     private static final int RETURN_TYPE_LIST = 4;
-    private static final int RETURN_TYPE_SINGLE = 5;
-    private static final int RETURN_TYPE_OLD_OBSERVABLE = 6;
-    private static final int RETURN_TYPE_FLOWABLE = 7;
+    private static final int RETURN_TYPE_OLD_OBSERVABLE = 5;
+    private static final int RETURN_TYPE_FLOWABLE = 6;
+    private static final int RETURN_TYPE_MAYBE = 7;
 
     protected static final String PRIMARY_KEY = "primary key";
     protected static final String AUTO_INCREMENT = "autoincrement";
@@ -120,21 +121,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return PlainDataModel.toOldObservable(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_FLOWABLE:
                         return PlainDataModel.toFlowable(cursor, modelClass, buildPassedParameters(args));
-                    case RETURN_TYPE_SINGLE:
-                        if (isPrimitiveWrapper(modelClass)) {
-                            Single value;
-                            if (cursor.moveToNext()) {
-                                value = Single.of(OwlUtils.readValue(cursor, 0, modelClass, null));
-                            } else {
-                                value = Single.empty();
-                            }
-                            cursor.close();
-                            return value;
-                        } else {
-                            Single value = PlainDataModel.readSingle(cursor, modelClass, buildPassedParameters(args));
-                            cursor.close();
-                            return value;
-                        }
+                    case RETURN_TYPE_MAYBE:
+                        return PlainDataModel.toMaybe(cursor, modelClass, buildPassedParameters(args));
                 }
             } finally {
                 mLock.unlock();
@@ -351,15 +339,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     if (rawType == List.class || rawType == ArrayList.class) {
                         info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = OwlUtils.getActualType(pt, 0);
-                    } else if (rawType == Single.class) {
-                        info.returnType = RETURN_TYPE_SINGLE;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
-                        if (isPrimitiveWrapper(info.modelClass) && info.projection.length != 1) {
-                            throw new IllegalArgumentException(
-                                    "select attribute should contain only 1 column when the return type is Single");
-                        }
                     } else if (isFlowable(rawType)) {
                         info.returnType = RETURN_TYPE_FLOWABLE;
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                    } else if (isMaybe(rawType)) {
+                        info.returnType = RETURN_TYPE_MAYBE;
                         info.modelClass = OwlUtils.getActualType(pt, 0);
                     } else if (isOldObservable(rawType)) {
                         info.returnType = RETURN_TYPE_OLD_OBSERVABLE;
@@ -466,12 +450,16 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return owl;
     }
 
-    private boolean isOldObservable(Type type) {
+    private static boolean isOldObservable(Type type) {
         return RxJavaHelper.hasRxJava1() && type == Observable.class;
     }
 
-    private boolean isFlowable(Type type) {
+    private static boolean isFlowable(Type type) {
         return RxJavaHelper.hasRxJava2() && type == Flowable.class;
+    }
+
+    private static boolean isMaybe(Type type) {
+        return RxJavaHelper.hasRxJava2() && type == Maybe.class;
     }
 
     static String buildPredicate(String predicate, ConstantWhere annotation) {

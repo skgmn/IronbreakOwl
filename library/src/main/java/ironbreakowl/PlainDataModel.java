@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.reactivex.Flowable;
+import io.reactivex.Maybe;
 import rx.Observable;
 import rx.subscriptions.Subscriptions;
 
@@ -129,6 +130,25 @@ class PlainDataModel {
         });
     }
 
+    static <T> Maybe<T> toMaybe(final Cursor cursor, Class<T> clazz,
+                                Map<String, Object> passedParameters) {
+        return Maybe.create(emitter -> {
+            final PlainDataModel model = getModel(clazz);
+            try {
+                if (cursor.moveToNext()) {
+                    T obj = fetchRow(cursor, model, passedParameters);
+                    emitter.onSuccess(obj);
+                } else {
+                    emitter.onComplete();
+                }
+            } catch (Throwable e) {
+                emitter.onError(e);
+            } finally {
+                cursor.close();
+            }
+        });
+    }
+
     static <T> Observable<T> toOldObservable(final Cursor cursor, Class<T> clazz,
                                              Map<String, Object> passedParameters) {
         return Observable.create(new Observable.OnSubscribe<T>() {
@@ -171,19 +191,6 @@ class PlainDataModel {
                 }));
             }
         });
-    }
-
-    static <T> Single<T> readSingle(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
-        final PlainDataModel collector = getModel(clazz);
-        if (cursor.moveToNext()) {
-            try {
-                return Single.of(fetchRow(cursor, collector, passedParameters));
-            } catch (Exception e) {
-                return Single.empty();
-            }
-        } else {
-            return Single.empty();
-        }
     }
 
     private static <T> T fetchRow(Cursor cursor, PlainDataModel model,

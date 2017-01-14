@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.reactivex.observers.TestObserver;
 import io.reactivex.subscribers.TestSubscriber;
 import ironbreakowl.data.User;
 import ironbreakowl.data.UserTable;
@@ -51,6 +52,25 @@ public class QueryTest extends DataTestBase {
         test.assertComplete();
         test.assertValueCount(3);
         assertValues(test.values());
+    }
+
+    @Test
+    public void queryMaybe() {
+        TestObserver<User> test;
+
+        test = userTable.findUser("User1").test();
+        test.assertComplete();
+        test.assertValueCount(1);
+        test.assertValueAt(0, user -> user.hasPhone && "12341234".equals(user.phoneNumber));
+
+        test = userTable.findUser("User2").test();
+        test.assertComplete();
+        test.assertValueCount(1);
+        test.assertValueAt(0, user -> !user.hasPhone && user.phoneNumber == null);
+
+        test = userTable.findUser("User4").test();
+        test.assertComplete();
+        test.assertNoValues();
     }
 
     private void assertValues(List<User> values) {

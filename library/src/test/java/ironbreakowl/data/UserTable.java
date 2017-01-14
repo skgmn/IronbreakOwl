@@ -3,6 +3,7 @@ package ironbreakowl.data;
 import java.util.List;
 
 import io.reactivex.Flowable;
+import io.reactivex.Maybe;
 import ironbreakowl.Delete;
 import ironbreakowl.Insert;
 import ironbreakowl.Query;
@@ -39,4 +40,7 @@ public interface UserTable {
 
     @Query
     Flowable<User> getAllFlowable();
+
+    @Query(where = NAME + "=?")
+    Maybe<User> findUser(@Where String name);
 }

@@ -12,8 +12,8 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 
 class OwlUtils {
-    public static Object readValue(Cursor cursor, int columnIndex, Class clazz,
-                                   @Nullable Parcelable.Creator parcelCreator) {
+    static Object readValue(Cursor cursor, int columnIndex, Class clazz,
+                            @Nullable Parcelable.Creator parcelCreator) {
         if (clazz == Integer.TYPE) {
             return cursor.getInt(columnIndex);
         } else if (clazz == Integer.class) {
@@ -58,7 +58,7 @@ class OwlUtils {
         }
     }
 
-    public static Parcelable.Creator getParcelCreator(Class clazz) {
+    static Parcelable.Creator getParcelCreator(Class clazz) {
         try {
             Field creatorField = clazz.getField("CREATOR");
             creatorField.setAccessible(true);
@@ -72,7 +72,7 @@ class OwlUtils {
         }
     }
 
-    public static void putValue(ContentValues values, String column, Object value) {
+    static void putValue(ContentValues values, String column, Object value) {
         if (value == null) {
             values.putNull(column);
         } else if (value instanceof Boolean) {
@@ -101,17 +101,12 @@ class OwlUtils {
             parcel.setDataPosition(0);
             byte[] bytes = parcel.marshall();
             values.put(column, bytes);
-        } else if (value instanceof Single) {
-            Single optionalValue = (Single) value;
-            if (optionalValue.hasValue) {
-                putValue(values, column, optionalValue.value);
-            }
         } else {
             PlainDataModel.putInto(values, value);
         }
     }
 
-    public static Class getActualType(ParameterizedType pt, int index) {
+    static Class getActualType(ParameterizedType pt, int index) {
         Type type = pt.getActualTypeArguments()[index];
         if (type instanceof GenericArrayType) {
             Type dataType = ((GenericArrayType) type).getGenericComponentType();
