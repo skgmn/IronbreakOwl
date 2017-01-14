@@ -1,10 +1,13 @@
 package ironbreakowl;
 
-import junit.framework.TestCase;
+import org.junit.Test;
 
 import java.lang.annotation.Annotation;
 
-public class OwlDatabaseOpenHelperTest extends TestCase {
+import static org.junit.Assert.assertEquals;
+
+public class OwlDatabaseOpenHelperTest {
+    @Test
     public void testBuildPredicate() throws Exception {
         String result = OwlDatabaseOpenHelper.buildPredicate("a = %d, b = %s, c = %s, d = %b, e = %b",
                 new ConstantWhere() {
