@@ -14,7 +14,6 @@ import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
@@ -28,6 +27,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.reactivex.Flowable;
 import rx.Observable;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
@@ -38,7 +38,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_LONG = 4;
     private static final int RETURN_TYPE_LIST = 5;
     private static final int RETURN_TYPE_SINGLE = 6;
-    private static final int RETURN_TYPE_OBSERVABLE = 7;
+    private static final int RETURN_TYPE_OLD_OBSERVABLE = 7;
+    private static final int RETURN_TYPE_FLOWABLE = 8;
 
     protected static final String PRIMARY_KEY = "primary key";
     protected static final String AUTO_INCREMENT = "autoincrement";
@@ -53,15 +54,15 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
 
     static abstract class QueryInfo {
-        public int returnType;
-        public Class modelClass;
+        int returnType;
+        Class modelClass;
 
         public abstract Object query(OwlTable table, Object[] args);
     }
 
     static abstract class SelectableQueryInfo extends QueryInfo {
-        public String selection;
-        public boolean[] isSelectionArgument;
+        String selection;
+        boolean[] isSelectionArgument;
 
         @NonNull
         protected NonStringArgumentBinder bind(Object[] args) {
@@ -74,9 +75,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     static class ValueSetter {
-        public String[] argumentColumnNames;
+        String[] argumentColumnNames;
         public boolean[] optional;
-        public List<Map.Entry<String, Object>> constantValues;
+        List<Map.Entry<String, Object>> constantValues;
     }
 
     interface ValueSettableQueryInfo {
@@ -84,9 +85,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     class SelectInfo extends SelectableQueryInfo {
-        public String[] projection;
-        public String orderBy;
-        public String[] passedParameterNames;
+        String[] projection;
+        String orderBy;
+        String[] passedParameterNames;
 
         private Map<String, Object> buildPassedParameters(Object[] args) {
             if (passedParameterNames != null) {
@@ -126,8 +127,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         ArrayList list = PlainDataModel.collect(cursor, modelClass, buildPassedParameters(args));
                         cursor.close();
                         return list;
-                    case RETURN_TYPE_OBSERVABLE:
-                        return PlainDataModel.observe(cursor, modelClass, buildPassedParameters(args));
+                    case RETURN_TYPE_OLD_OBSERVABLE:
+                        return PlainDataModel.toOldObservable(cursor, modelClass, buildPassedParameters(args));
+                    case RETURN_TYPE_FLOWABLE:
+                        return PlainDataModel.toFlowable(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_SINGLE:
                         if (isPrimitiveWrapper(modelClass)) {
                             Single value;
@@ -151,7 +154,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    static boolean isPrimitiveWrapper(Class clazz) {
+    private static boolean isPrimitiveWrapper(Class clazz) {
         return clazz == Boolean.class ||
                 clazz == Character.class ||
                 clazz == Byte.class ||
@@ -187,8 +190,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
-        public ValueSetter valueSetter = new ValueSetter();
-        public int conflictAlgorithm;
+        ValueSetter valueSetter = new ValueSetter();
+        int conflictAlgorithm;
 
         @Override
         public ValueSetter valueSetter() {
@@ -218,7 +221,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
-        public ValueSetter valueSetter = new ValueSetter();
+        ValueSetter valueSetter = new ValueSetter();
 
         @Override
         public ValueSetter valueSetter() {
@@ -252,17 +255,15 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         private final String mTableName;
         private final HashMap<Method, QueryInfo> mQueryInfos = new HashMap<>();
 
-        public Object tableInterface;
+        Object tableInterface;
 
         public OwlTable(String tableName) {
             this.mTableName = tableName;
         }
     }
 
-    private static Boolean sHasRxJava;
-
     private final HashMap<Class, OwlTable> mTables = new HashMap<>();
-    final ReentrantLock mLock = new ReentrantLock();
+    private final ReentrantLock mLock = new ReentrantLock();
     private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
@@ -289,15 +290,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             synchronized (owl) {
                 if (owl.tableInterface == null) {
                     tableInterface = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz},
-                            new InvocationHandler() {
-                                @Override
-                                public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                                    QueryInfo queryInfo = owl.mQueryInfos.get(method);
-                                    if (queryInfo == null) {
-                                        throw new UnsupportedOperationException();
-                                    }
-                                    return queryInfo.query(owl, args);
+                            (proxy, method, args) -> {
+                                QueryInfo queryInfo = owl.mQueryInfos.get(method);
+                                if (queryInfo == null) {
+                                    throw new UnsupportedOperationException();
                                 }
+                                return queryInfo.query(owl, args);
                             });
                     owl.tableInterface = tableInterface;
                 } else {
@@ -378,8 +376,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                             throw new IllegalArgumentException(
                                     "select attribute should contain only 1 column when the return type is Single");
                         }
-                    } else if (isObservable(rawType)) {
-                        info.returnType = RETURN_TYPE_OBSERVABLE;
+                    } else if (isFlowable(rawType)) {
+                        info.returnType = RETURN_TYPE_FLOWABLE;
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                    } else if (isOldObservable(rawType)) {
+                        info.returnType = RETURN_TYPE_OLD_OBSERVABLE;
                         info.modelClass = OwlUtils.getActualType(pt, 0);
                     } else {
                         returnTypeValid = false;
@@ -486,16 +487,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return owl;
     }
 
-    private static boolean isObservable(Type type) {
-        if (sHasRxJava == null) {
-            try {
-                Class.forName(Observable.class.getName());
-                sHasRxJava = true;
-            } catch (Throwable e) {
-                sHasRxJava = false;
-            }
-        }
-        return sHasRxJava && type == Observable.class;
+    private boolean isOldObservable(Type type) {
+        return RxJavaHelper.hasRxJava1() && type == Observable.class;
+    }
+
+    private boolean isFlowable(Type type) {
+        return RxJavaHelper.hasRxJava2() && type == Flowable.class;
     }
 
     static String buildPredicate(String predicate, ConstantWhere annotation) {
@@ -575,7 +572,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    static ContentValues makeValues(ValueSetter valueSetter, Object[] args) {
+    private static ContentValues makeValues(ValueSetter valueSetter, Object[] args) {
         String[] names = valueSetter.argumentColumnNames;
         boolean[] optional = valueSetter.optional;
         List<Map.Entry<String, Object>> constValues = valueSetter.constantValues;
@@ -600,7 +597,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return values;
     }
 
-    static List<Map.Entry<String, Object>> parseConstantValues(Method method) {
+    private static List<Map.Entry<String, Object>> parseConstantValues(Method method) {
         ConstantValues values = method.getAnnotation(ConstantValues.class);
         if (values == null) return null;
 

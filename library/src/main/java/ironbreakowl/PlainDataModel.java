@@ -6,6 +6,10 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Pair;
 
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -16,7 +20,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.reactivex.Flowable;
 import rx.Observable;
+import rx.subscriptions.Subscriptions;
 
 class PlainDataModel {
     private static final HashMap<Class, PlainDataModel> sCollectors = new HashMap<>();
@@ -24,7 +30,7 @@ class PlainDataModel {
     private static class FieldInfo {
         public Column column;
         public Class type;
-        public Parcelable.Creator parcelCreator;
+        Parcelable.Creator parcelCreator;
 
         public void setType(Class type) {
             this.type = type;
@@ -34,10 +40,10 @@ class PlainDataModel {
 
     public final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
     public Constructor constructor;
-    public String[] passedParameterNames;
-    public FieldInfo[] parameters;
+    private String[] passedParameterNames;
+    private FieldInfo[] parameters;
 
-    public static void putInto(ContentValues values, Object o) {
+    static void putInto(ContentValues values, Object o) {
         Class<?> clazz = o.getClass();
         PlainDataModel model = getModel(clazz);
         if (model != null) {
@@ -56,7 +62,7 @@ class PlainDataModel {
         }
     }
 
-    public static <T> ArrayList<T> collect(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+    static <T> ArrayList<T> collect(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
         final PlainDataModel collector = getModel(clazz);
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
@@ -72,25 +78,101 @@ class PlainDataModel {
         return list;
     }
 
-    public static <T> Observable<T> observe(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
-        final PlainDataModel collector = getModel(clazz);
-        return Observable.create(subscriber -> {
-            try {
-                while (cursor.moveToNext() && !subscriber.isUnsubscribed()) {
-                    T obj = fetchRow(cursor, collector, passedParameters);
-                    subscriber.onNext(obj);
-                }
-            } catch (Throwable e) {
-                subscriber.onError(e);
-                return;
-            } finally {
-                cursor.close();
+    static <T> Flowable<T> toFlowable(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+        return Flowable.unsafeCreate(new Publisher<T>() {
+            @Override
+            public void subscribe(Subscriber<? super T> s) {
+                final PlainDataModel model = getModel(clazz);
+                s.onSubscribe(new Subscription() {
+                    private volatile boolean reading;
+                    private volatile boolean canceled;
+
+                    @Override
+                    public void request(long n) {
+                        reading = true;
+                        try {
+                            for (int i = 0; i < n && !canceled; ++i) {
+                                final boolean complete;
+                                if (cursor.moveToNext()) {
+                                    T obj = fetchRow(cursor, model, passedParameters);
+                                    s.onNext(obj);
+                                    complete = cursor.isLast();
+                                } else {
+                                    complete = true;
+                                }
+                                if (complete) {
+                                    cursor.close();
+                                    s.onComplete();
+                                    break;
+                                }
+                            }
+                        } catch (Throwable e) {
+                            s.onError(e);
+                        } finally {
+                            if (canceled && !cursor.isClosed()) {
+                                cursor.close();
+                            }
+                            reading = false;
+                        }
+                    }
+
+                    @Override
+                    public void cancel() {
+                        canceled = true;
+                        if (!reading && !cursor.isClosed()) {
+                            cursor.close();
+                        }
+                    }
+                });
             }
-            subscriber.onCompleted();
         });
     }
 
-    public static <T> Single<T> readSingle(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+    static <T> Observable<T> toOldObservable(final Cursor cursor, Class<T> clazz,
+                                             Map<String, Object> passedParameters) {
+        return Observable.create(new Observable.OnSubscribe<T>() {
+            private volatile boolean reading;
+
+            @Override
+            public void call(rx.Subscriber<? super T> s) {
+                final PlainDataModel model = getModel(clazz);
+                s.setProducer(n -> {
+                    reading = true;
+                    try {
+                        for (int i = 0; i < n && !s.isUnsubscribed(); ++i) {
+                            final boolean complete;
+                            if (cursor.moveToNext()) {
+                                T obj = fetchRow(cursor, model, passedParameters);
+                                s.onNext(obj);
+                                complete = cursor.isLast();
+                            } else {
+                                complete = true;
+                            }
+                            if (complete) {
+                                cursor.close();
+                                s.onCompleted();
+                                break;
+                            }
+                        }
+                    } catch (Throwable e) {
+                        s.onError(e);
+                    } finally {
+                        if (s.isUnsubscribed() && !cursor.isClosed()) {
+                            cursor.close();
+                        }
+                        reading = false;
+                    }
+                });
+                s.add(Subscriptions.create(() -> {
+                    if (!reading && !cursor.isClosed()) {
+                        cursor.close();
+                    }
+                }));
+            }
+        });
+    }
+
+    static <T> Single<T> readSingle(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
         final PlainDataModel collector = getModel(clazz);
         if (cursor.moveToNext()) {
             try {

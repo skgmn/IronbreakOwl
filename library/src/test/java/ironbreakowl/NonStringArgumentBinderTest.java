@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 
 public class NonStringArgumentBinderTest {
     @Test
-    public void testBind() {
+    public void bind() {
         NonStringArgumentBinder binder = new NonStringArgumentBinder("a=? and b=?", new Object[] {"A", "B"},
                 makeTrueArrays(2));
         assertEquals("a=? and b=?", binder.selection);

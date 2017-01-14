@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 
 public class OwlDatabaseOpenHelperTest {
     @Test
-    public void testBuildPredicate() throws Exception {
+    public void buildPredicate() {
         String result = OwlDatabaseOpenHelper.buildPredicate("a = %d, b = %s, c = %s, d = %b, e = %b",
                 new ConstantWhere() {
                     @Override
