@@ -6,13 +6,13 @@ import java.util.regex.Pattern;
 class NonStringArgumentBinder {
     private static final Pattern PATTERN_ARGUMENT_PLACEHOLDER_OR_STRING = Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|\\?");
 
-    public String[] selectionArgs;
-    public String selection;
+    String[] selectionArgs;
+    String selection;
 
-    public NonStringArgumentBinder() {
+    NonStringArgumentBinder() {
     }
 
-    public NonStringArgumentBinder(String selection, Object[] args, boolean[] whereTarget) {
+    NonStringArgumentBinder(String selection, Object[] args, boolean[] whereTarget) {
         int selectionArgCount = 0;
         boolean hasNonString = false;
         int argLength = args == null ? 0 : args.length;

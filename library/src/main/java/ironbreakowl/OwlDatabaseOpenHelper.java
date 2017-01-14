@@ -84,7 +84,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         ValueSetter valueSetter();
     }
 
-    class SelectInfo extends SelectableQueryInfo {
+    private class SelectInfo extends SelectableQueryInfo {
         String[] projection;
         String orderBy;
         String[] passedParameterNames;
@@ -124,9 +124,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     case RETURN_TYPE_DATA_READER:
                         return CursorReader.create(cursor, modelClass);
                     case RETURN_TYPE_LIST:
-                        ArrayList list = PlainDataModel.collect(cursor, modelClass, buildPassedParameters(args));
-                        cursor.close();
-                        return list;
+                        return PlainDataModel.toList(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_OLD_OBSERVABLE:
                         return PlainDataModel.toOldObservable(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_FLOWABLE:

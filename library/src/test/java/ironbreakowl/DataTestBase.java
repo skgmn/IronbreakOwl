@@ -16,8 +16,8 @@ import ironbreakowl.library.BuildConfig;
 @RunWith(RobolectricTestRunner.class)
 @Config(constants = BuildConfig.class)
 public class DataTestBase {
-    protected OpenHelper openHelper;
-    protected UserTable userTable;
+    OpenHelper openHelper;
+    UserTable userTable;
 
     @Before
     public void setup() {

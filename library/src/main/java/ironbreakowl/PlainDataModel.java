@@ -25,10 +25,10 @@ import rx.Observable;
 import rx.subscriptions.Subscriptions;
 
 class PlainDataModel {
-    private static final HashMap<Class, PlainDataModel> sCollectors = new HashMap<>();
+    private static final HashMap<Class, PlainDataModel> models = new HashMap<>();
 
     private static class FieldInfo {
-        public Column column;
+        Column column;
         public Class type;
         Parcelable.Creator parcelCreator;
 
@@ -38,8 +38,8 @@ class PlainDataModel {
         }
     }
 
-    public final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
-    public Constructor constructor;
+    private final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
+    private Constructor constructor;
     private String[] passedParameterNames;
     private FieldInfo[] parameters;
 
@@ -62,12 +62,12 @@ class PlainDataModel {
         }
     }
 
-    static <T> ArrayList<T> collect(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
-        final PlainDataModel collector = getModel(clazz);
+    static <T> ArrayList<T> toList(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+        final PlainDataModel model = getModel(clazz);
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
             try {
-                T obj = fetchRow(cursor, collector, passedParameters);
+                T obj = fetchRow(cursor, model, passedParameters);
                 list.add(obj);
             } catch (RuntimeException e) {
                 throw e;
@@ -75,6 +75,7 @@ class PlainDataModel {
                 throw new RuntimeException(e);
             }
         }
+        cursor.close();
         return list;
     }
 
@@ -185,16 +186,16 @@ class PlainDataModel {
         }
     }
 
-    private static <T> T fetchRow(Cursor cursor, PlainDataModel collector,
+    private static <T> T fetchRow(Cursor cursor, PlainDataModel model,
                                   Map<String, Object> passedParameters)
             throws InstantiationException, IllegalAccessException {
         T obj;
         try {
-            FieldInfo[] parameters = collector.parameters;
-            String[] passedParameterNames = collector.passedParameterNames;
+            FieldInfo[] parameters = model.parameters;
+            String[] passedParameterNames = model.passedParameterNames;
             if (parameters == null && passedParameterNames == null) {
                 //noinspection unchecked
-                obj = (T) collector.constructor.newInstance();
+                obj = (T) model.constructor.newInstance();
             } else {
                 int length = parameters != null ? parameters.length : passedParameterNames.length;
                 Object[] params = new Object[length];
@@ -219,13 +220,13 @@ class PlainDataModel {
                     throw new IllegalStateException();
                 }
                 //noinspection unchecked
-                obj = (T) collector.constructor.newInstance(params);
+                obj = (T) model.constructor.newInstance(params);
             }
         } catch (InvocationTargetException e) {
             throw new RuntimeException(e);
         }
 
-        for (Pair<Field, FieldInfo> pair : collector.fields) {
+        for (Pair<Field, FieldInfo> pair : model.fields) {
             Field field = pair.first;
             FieldInfo fieldInfo = pair.second;
             String columnName = fieldInfo.column.value();
@@ -274,11 +275,11 @@ class PlainDataModel {
     }
 
     private static PlainDataModel getModel(Class clazz) {
-        synchronized (sCollectors) {
-            PlainDataModel collector = sCollectors.get(clazz);
+        synchronized (models) {
+            PlainDataModel collector = models.get(clazz);
             if (collector == null) {
                 collector = parseClass(clazz);
-                sCollectors.put(clazz, collector);
+                models.put(clazz, collector);
             }
             return collector;
         }
@@ -289,7 +290,7 @@ class PlainDataModel {
             throw new IllegalArgumentException("Interface or abstract class is not allowed: "
                     + clazz.getCanonicalName());
         }
-        PlainDataModel collector = new PlainDataModel();
+        PlainDataModel model = new PlainDataModel();
 
         for (Constructor ctor : clazz.getDeclaredConstructors()) {
             Annotation[][] annotations = ctor.getParameterAnnotations();
@@ -303,48 +304,52 @@ class PlainDataModel {
                             break;
                         }
                     }
+                    if (isEligible) {
+                        break;
+                    }
                 }
             }
             if (isEligible) {
-                if (collector.constructor != null) {
+                if (model.constructor != null) {
                     throw new IllegalArgumentException("Multiple constructor found for " + clazz.getCanonicalName());
                 }
-                collector.constructor = ctor;
+                model.constructor = ctor;
                 ctor.setAccessible(true);
                 for (int i = 0; i < length; ++i) {
                     Annotation[] parameterAnnotations = annotations[i];
-                    boolean unknown = true;
+                    boolean unknown = parameterAnnotations.length == 0;
                     for (Annotation annotation : parameterAnnotations) {
                         if (annotation instanceof Parameter) {
-                            unknown = false;
-                            if (collector.passedParameterNames == null) {
-                                collector.passedParameterNames = new String[length];
+                            if (model.passedParameterNames == null) {
+                                model.passedParameterNames = new String[length];
                             }
-                            collector.passedParameterNames[i] = ((Parameter) annotation).value();
+                            model.passedParameterNames[i] = ((Parameter) annotation).value();
                         } else if (annotation instanceof Column) {
-                            unknown = false;
-                            if (collector.parameters == null) {
-                                collector.parameters = new FieldInfo[length];
+                            if (model.parameters == null) {
+                                model.parameters = new FieldInfo[length];
                             }
                             FieldInfo fieldInfo = new FieldInfo();
                             fieldInfo.column = (Column) annotation;
                             fieldInfo.setType(ctor.getParameterTypes()[i]);
-                            collector.parameters[i] = fieldInfo;
+                            model.parameters[i] = fieldInfo;
+                        } else {
+                            unknown = true;
+                            break;
                         }
                     }
                     if (unknown) {
-                        throw new IllegalArgumentException("All parameter should be annotated with @DecoderParam or " +
+                        throw new IllegalArgumentException("All parameter should be annotated with @Parameter or " +
                                 "@Column");
                     }
                 }
             }
         }
-        if (collector.constructor == null) {
+        if (model.constructor == null) {
             throw new IllegalArgumentException("Couldn't find proper constructor for "
                     + clazz.getCanonicalName());
         }
 
-        List<Pair<Field, FieldInfo>> fields = collector.fields;
+        List<Pair<Field, FieldInfo>> fields = model.fields;
         while (clazz != null && clazz != Object.class) {
             for (Field field : clazz.getDeclaredFields()) {
                 Column column = field.getAnnotation(Column.class);
@@ -359,6 +364,6 @@ class PlainDataModel {
             }
             clazz = clazz.getSuperclass();
         }
-        return collector;
+        return model;
     }
 }
