@@ -1,10 +1,13 @@
 package ironbreakowl;
 
-import junit.framework.TestCase;
+import org.junit.Test;
 
 import java.util.Arrays;
 
-public class NonStringArgumentBinderTest extends TestCase {
+import static org.junit.Assert.assertEquals;
+
+public class NonStringArgumentBinderTest {
+    @Test
     public void testBind() {
         NonStringArgumentBinder binder = new NonStringArgumentBinder("a=? and b=?", new Object[] {"A", "B"},
                 makeTrueArrays(2));
