@@ -1,10 +1,8 @@
 package ironbreakowl;
 
-import android.annotation.TargetApi;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Build;
@@ -32,23 +30,18 @@ import rx.Observable;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
-    private static final int RETURN_TYPE_DATA_READER = 1;
-    private static final int RETURN_TYPE_INT = 2;
-    private static final int RETURN_TYPE_VOID = 3;
-    private static final int RETURN_TYPE_LONG = 4;
-    private static final int RETURN_TYPE_LIST = 5;
-    private static final int RETURN_TYPE_SINGLE = 6;
-    private static final int RETURN_TYPE_OLD_OBSERVABLE = 7;
-    private static final int RETURN_TYPE_FLOWABLE = 8;
+    private static final int RETURN_TYPE_INT = 1;
+    private static final int RETURN_TYPE_VOID = 2;
+    private static final int RETURN_TYPE_LONG = 3;
+    private static final int RETURN_TYPE_LIST = 4;
+    private static final int RETURN_TYPE_SINGLE = 5;
+    private static final int RETURN_TYPE_OLD_OBSERVABLE = 6;
+    private static final int RETURN_TYPE_FLOWABLE = 7;
 
     protected static final String PRIMARY_KEY = "primary key";
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
     protected static final String DEFAULT_NULL = "default null";
-
-    private static final int PARAMETER_TYPE_UNKNOWN = 0;
-    private static final int PARAMETER_TYPE_SELECTION_ARGUMENT = 1;
-    private static final int PARAMETER_TYPE_PASSED_PARAMETER = 2;
 
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
@@ -65,7 +58,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         boolean[] isSelectionArgument;
 
         @NonNull
-        protected NonStringArgumentBinder bind(Object[] args) {
+        NonStringArgumentBinder bind(Object[] args) {
             if (!TextUtils.isEmpty(selection)) {
                 return new NonStringArgumentBinder(selection, args, isSelectionArgument);
             } else {
@@ -74,9 +67,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    static class ValueSetter {
+    private static class ValueSetter {
         String[] argumentColumnNames;
-        public boolean[] optional;
+        boolean[] optional;
         List<Map.Entry<String, Object>> constantValues;
     }
 
@@ -121,8 +114,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         int count = cursor.getCount();
                         cursor.close();
                         return count;
-                    case RETURN_TYPE_DATA_READER:
-                        return CursorReader.create(cursor, modelClass);
                     case RETURN_TYPE_LIST:
                         return PlainDataModel.toList(cursor, modelClass, buildPassedParameters(args));
                     case RETURN_TYPE_OLD_OBSERVABLE:
@@ -164,7 +155,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 clazz == byte[].class;
     }
 
-    class DeleteInfo extends SelectableQueryInfo {
+    private class DeleteInfo extends SelectableQueryInfo {
         @Override
         public Object query(OwlTable owl, Object[] args) {
             NonStringArgumentBinder argBinder = bind(args);
@@ -187,7 +178,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
+    private class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
         ValueSetter valueSetter = new ValueSetter();
         int conflictAlgorithm;
 
@@ -218,7 +209,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
+    private class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
         ValueSetter valueSetter = new ValueSetter();
 
         @Override
@@ -249,13 +240,13 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    static class OwlTable {
+    private static class OwlTable {
         private final String mTableName;
         private final HashMap<Method, QueryInfo> mQueryInfos = new HashMap<>();
 
         Object tableInterface;
 
-        public OwlTable(String tableName) {
+        OwlTable(String tableName) {
             this.mTableName = tableName;
         }
     }
@@ -266,13 +257,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
         super(context, name, factory, version); // Don't call this(...)
-        init();
-    }
-
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version,
-                                 DatabaseErrorHandler errorHandler) {
-        super(context, name, factory, version, errorHandler);
         init();
     }
 
@@ -383,9 +367,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     } else {
                         returnTypeValid = false;
                     }
-                } else if (returnType instanceof Class && DataReader.class.isAssignableFrom((Class<?>) returnType)) {
-                    info.returnType = RETURN_TYPE_DATA_READER;
-                    info.modelClass = (Class) returnType;
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
                     info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Integer.TYPE || returnType == Integer.class) {

@@ -29,10 +29,10 @@ class PlainDataModel {
 
     private static class FieldInfo {
         Column column;
-        public Class type;
+        Class type;
         Parcelable.Creator parcelCreator;
 
-        public void setType(Class type) {
+        void setType(Class type) {
             this.type = type;
             parcelCreator = Parcelable.class.isAssignableFrom(type) ? OwlUtils.getParcelCreator(type) : null;
         }
