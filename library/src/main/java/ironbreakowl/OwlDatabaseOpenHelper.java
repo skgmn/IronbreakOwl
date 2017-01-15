@@ -100,10 +100,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         @Override
         public Object query(OwlTable owl, Object[] args) {
             NonStringArgumentBinder argBinder = bind(args);
-            mLock.lock();
+            lock.lock();
             try {
                 SQLiteDatabase db = getReadableDatabase();
-                final Cursor cursor = db.query(owl.mTableName, projection, argBinder.selection, argBinder.selectionArgs,
+                final Cursor cursor = db.query(owl.tableName, projection, argBinder.selection, argBinder.selectionArgs,
                         null, null, orderBy);
                 switch (returnType) {
                     case RETURN_TYPE_BOOLEAN:
@@ -124,7 +124,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return PlainDataModel.toMaybe(cursor, modelClass, buildPassedParameters(args));
                 }
             } finally {
-                mLock.unlock();
+                lock.unlock();
             }
             return null;
         }
@@ -134,10 +134,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         @Override
         public Object query(OwlTable owl, Object[] args) {
             NonStringArgumentBinder argBinder = bind(args);
-            mLock.lock();
+            lock.lock();
             try {
                 SQLiteDatabase db = getWritableDatabase();
-                int affected = db.delete(owl.mTableName, argBinder.selection, argBinder.selectionArgs);
+                int affected = db.delete(owl.tableName, argBinder.selection, argBinder.selectionArgs);
                 switch (returnType) {
                     case RETURN_TYPE_VOID:
                         return null;
@@ -147,7 +147,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return affected != 0;
                 }
             } finally {
-                mLock.unlock();
+                lock.unlock();
             }
             return null;
         }
@@ -164,11 +164,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         @Override
         public Object query(OwlTable owl, Object[] args) {
-            mLock.lock();
+            lock.lock();
             try {
                 SQLiteDatabase db = getWritableDatabase();
                 ContentValues values = makeValues(valueSetter, args);
-                long retVal = db.insertWithOnConflict(owl.mTableName, null, values, conflictAlgorithm);
+                long retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
                 switch (returnType) {
                     case RETURN_TYPE_VOID:
                         return null;
@@ -178,7 +178,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return retVal != -1;
                 }
             } finally {
-                mLock.unlock();
+                lock.unlock();
             }
             return null;
         }
@@ -195,11 +195,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         @Override
         public Object query(OwlTable owl, Object[] args) {
             NonStringArgumentBinder argBinder = bind(args);
-            mLock.lock();
+            lock.lock();
             try {
                 SQLiteDatabase db = getWritableDatabase();
                 ContentValues values = makeValues(valueSetter, args);
-                int retVal = db.update(owl.mTableName, values, argBinder.selection, argBinder.selectionArgs);
+                int retVal = db.update(owl.tableName, values, argBinder.selection, argBinder.selectionArgs);
                 switch (returnType) {
                     case RETURN_TYPE_VOID:
                         return null;
@@ -209,26 +209,26 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         return retVal != 0;
                 }
             } finally {
-                mLock.unlock();
+                lock.unlock();
             }
             return null;
         }
     }
 
     private static class OwlTable {
-        private final String mTableName;
-        private final Map<Method, QueryInfo> mQueryInfos = new ArrayMap<>();
+        private final String tableName;
+        private final Map<Method, QueryInfo> queryInfos = new ArrayMap<>();
 
-        Object tableInterface;
+        volatile Object tableInterface;
 
         OwlTable(String tableName) {
-            this.mTableName = tableName;
+            this.tableName = tableName;
         }
     }
 
-    private final Map<Class, OwlTable> mTables = new ArrayMap<>();
-    private final ReentrantLock mLock = new ReentrantLock();
-    private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
+    private final Map<Class, OwlTable> tables = new ArrayMap<>();
+    private final ReentrantLock lock = new ReentrantLock();
+    private WeakReference<SQLiteDatabase> lockingDisabledDatabase;
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
         super(context, name, factory, version); // Don't call this(...)
@@ -248,7 +248,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (owl.tableInterface == null) {
                     tableInterface = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz},
                             (proxy, method, args) -> {
-                                QueryInfo queryInfo = owl.mQueryInfos.get(method);
+                                QueryInfo queryInfo = owl.queryInfos.get(method);
                                 if (queryInfo == null) {
                                     throw new UnsupportedOperationException();
                                 }
@@ -266,11 +266,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     @NonNull
     private OwlTable getOwlTable(Class clazz) {
-        synchronized (mTables) {
-            OwlTable owl = mTables.get(clazz);
+        synchronized (tables) {
+            OwlTable owl = tables.get(clazz);
             if (owl == null) {
                 owl = parseClass(clazz);
-                mTables.put(clazz, owl);
+                tables.put(clazz, owl);
             }
             return owl;
         }
@@ -349,7 +349,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     throw new IllegalArgumentException("Supported return types for @Query: Iterable<T>, boolean");
                 }
 
-                owl.mQueryInfos.put(method, info);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
@@ -373,7 +373,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     throw new IllegalArgumentException("void, boolean or int is supported for @Delete");
                 }
 
-                owl.mQueryInfos.put(method, info);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
@@ -404,7 +404,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     throw new IllegalArgumentException("void, boolean or long is supported for @Insert");
                 }
 
-                owl.mQueryInfos.put(method, info);
+                owl.queryInfos.put(method, info);
                 continue;
             }
 
@@ -429,11 +429,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     throw new IllegalArgumentException("void, boolean or int is supported for @Update");
                 }
 
-                owl.mQueryInfos.put(method, info);
+                owl.queryInfos.put(method, info);
             }
         }
 
-        mTables.put(clazz, owl);
+        tables.put(clazz, owl);
         return owl;
     }
 
@@ -596,7 +596,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     public String getTableName(Class clazz) {
-        return getOwlTable(clazz).mTableName;
+        return getOwlTable(clazz).tableName;
     }
 
     protected void createTable(SQLiteDatabase db, Class clazz, String... columns) {
@@ -653,13 +653,13 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     }
 
     public void beginTransaction() {
-        mLock.lock();
+        lock.lock();
         getWritableDatabase().beginTransaction();
     }
 
     public void endTransaction() {
         getWritableDatabase().endTransaction();
-        mLock.unlock();
+        lock.unlock();
     }
 
     public void setTransactionSuccessful() {
@@ -669,11 +669,11 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     @SuppressWarnings("deprecation")
     private void setLockingDisabled(SQLiteDatabase db) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) return;
-        SQLiteDatabase lockingDisabledDatabase = mLockingDisabledDatabase == null ? null :
-                mLockingDisabledDatabase.get();
+        SQLiteDatabase lockingDisabledDatabase = this.lockingDisabledDatabase == null ? null :
+                this.lockingDisabledDatabase.get();
         if (lockingDisabledDatabase != db) {
             db.setLockingEnabled(false);
-            mLockingDisabledDatabase = new WeakReference<>(db);
+            this.lockingDisabledDatabase = new WeakReference<>(db);
         }
     }
 
