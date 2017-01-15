@@ -16,6 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +69,62 @@ class PlainDataModel {
         }
         cursor.close();
         return list;
+    }
+
+    static <T> Iterable<T> toIterable(final Cursor cursor, Class<T> clazz,
+                                      ModelDeserializationArguments args) {
+        final PlainDataModel model = getModel(clazz);
+        return new Iterable<T>() {
+            private boolean iteratorCreated;
+
+            @Override
+            public Iterator<T> iterator() {
+                if (iteratorCreated) {
+                    throw new IllegalStateException("This Iterable only allows one Iterator instance");
+                }
+                iteratorCreated = true;
+                return new Iterator<T>() {
+                    private boolean hasNext;
+                    private boolean hasNextCalled;
+
+                    private void closeCursor() {
+                        cursor.close();
+                        OwlDatabaseOpenHelper.getCursorList(false).remove(cursor);
+                    }
+
+                    @Override
+                    public boolean hasNext() {
+                        if (!hasNextCalled) {
+                            hasNextCalled = true;
+                            hasNext = cursor.moveToNext();
+                            if (!hasNext) {
+                                closeCursor();
+                            }
+                        }
+                        return hasNext;
+                    }
+
+                    @Override
+                    public T next() {
+                        try {
+                            T obj = model.fetchRow(cursor, args);
+                            if (cursor.isLast()) {
+                                closeCursor();
+                                hasNextCalled = true;
+                                hasNext = false;
+                            } else {
+                                hasNextCalled = false;
+                            }
+                            return obj;
+                        } catch (RuntimeException e) {
+                            throw e;
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                };
+            }
+        };
     }
 
     static <T> Flowable<T> toFlowable(final Cursor cursor, Class<T> clazz,
@@ -186,42 +243,38 @@ class PlainDataModel {
 
     @SuppressWarnings("WeakerAccess")
     <T> T fetchRow(Cursor cursor, ModelDeserializationArguments args)
-            throws InstantiationException, IllegalAccessException {
+            throws InstantiationException, IllegalAccessException, InvocationTargetException {
         T obj;
-        try {
-            FieldInfo[] columns = this.ctorColumns;
-            String[] parameterNames = this.ctorParamNames;
-            if (columns == null && parameterNames == null) {
-                //noinspection unchecked
-                obj = (T) ctor.newInstance();
-            } else {
-                int length = columns != null ? columns.length : parameterNames.length;
-                Map<String, Object> parameters = args.parameters;
-                Object[] params = new Object[length];
-                for (int i = 0; i < length; ++i) {
-                    if (parameterNames != null && parameters != null) {
-                        String parameterName = parameterNames[i];
-                        if (parameterName != null) {
-                            params[i] = parameters.get(parameterName);
-                            continue;
-                        }
+        FieldInfo[] columns = this.ctorColumns;
+        String[] parameterNames = this.ctorParamNames;
+        if (columns == null && parameterNames == null) {
+            //noinspection unchecked
+            obj = (T) ctor.newInstance();
+        } else {
+            int length = columns != null ? columns.length : parameterNames.length;
+            Map<String, Object> parameters = args.parameters;
+            Object[] params = new Object[length];
+            for (int i = 0; i < length; ++i) {
+                if (parameterNames != null && parameters != null) {
+                    String parameterName = parameterNames[i];
+                    if (parameterName != null) {
+                        params[i] = parameters.get(parameterName);
+                        continue;
                     }
-                    if (columns != null) {
-                        FieldInfo fieldInfo = columns[i];
-                        if (fieldInfo != null) {
-                            params[i] = OwlUtils.readValue(cursor,
-                                    cursor.getColumnIndex(fieldInfo.column.value()),
-                                    fieldInfo, null, null);
-                            continue;
-                        }
-                    }
-                    throw new IllegalStateException();
                 }
-                //noinspection unchecked
-                obj = (T) ctor.newInstance(params);
+                if (columns != null) {
+                    FieldInfo fieldInfo = columns[i];
+                    if (fieldInfo != null) {
+                        params[i] = OwlUtils.readValue(cursor,
+                                cursor.getColumnIndex(fieldInfo.column.value()),
+                                fieldInfo, null, null);
+                        continue;
+                    }
+                }
+                throw new IllegalStateException();
             }
-        } catch (InvocationTargetException e) {
-            throw new RuntimeException(e);
+            //noinspection unchecked
+            obj = (T) ctor.newInstance(params);
         }
 
         for (int i = 0; i < 2; ++i) {

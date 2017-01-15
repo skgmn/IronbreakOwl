@@ -19,6 +19,7 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -35,9 +36,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_VOID = 2;
     private static final int RETURN_TYPE_LONG = 3;
     private static final int RETURN_TYPE_LIST = 4;
-    private static final int RETURN_TYPE_OLD_OBSERVABLE = 5;
-    private static final int RETURN_TYPE_FLOWABLE = 6;
-    private static final int RETURN_TYPE_MAYBE = 7;
+    private static final int RETURN_TYPE_ITERABLE = 5;
+    private static final int RETURN_TYPE_OLD_OBSERVABLE = 6;
+    private static final int RETURN_TYPE_FLOWABLE = 7;
+    private static final int RETURN_TYPE_MAYBE = 8;
 
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
@@ -46,196 +48,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
 
-    static abstract class QueryInfo {
-        int returnType;
-        Class modelClass;
-
-        public abstract Object query(OwlTable table, Object[] args);
-    }
-
-    static abstract class SelectableQueryInfo extends QueryInfo {
-        String selection;
-        boolean[] isSelectionArgument;
-
-        @NonNull
-        NonStringArgumentBinder bind(Object[] args) {
-            if (!TextUtils.isEmpty(selection)) {
-                return new NonStringArgumentBinder(selection, args, isSelectionArgument);
-            } else {
-                return new NonStringArgumentBinder();
-            }
-        }
-    }
-
-    private static class ValueSetter {
-        String[] argumentColumnNames;
-        boolean[] optional;
-        List<Map.Entry<String, Object>> constantValues;
-    }
-
-    interface ValueSettableQueryInfo {
-        ValueSetter valueSetter();
-    }
-
-    private class SelectInfo extends SelectableQueryInfo {
-        String[] projection;
-        String orderBy;
-        String[] ctorParamNames;
-        String[] conditionNames;
-
-        @Override
-        public Object query(OwlTable owl, Object[] args) {
-            NonStringArgumentBinder argBinder = bind(args);
-            lock.lock();
-            try {
-                SQLiteDatabase db = getReadableDatabase();
-                final Cursor cursor = db.query(owl.tableName, projection, argBinder.selection, argBinder.selectionArgs,
-                        null, null, orderBy);
-                switch (returnType) {
-                    case RETURN_TYPE_BOOLEAN:
-                        boolean retVal = cursor.moveToNext();
-                        cursor.close();
-                        return retVal;
-                    case RETURN_TYPE_INT:
-                        int count = cursor.getCount();
-                        cursor.close();
-                        return count;
-                    case RETURN_TYPE_LIST:
-                        return PlainDataModel.toList(cursor, modelClass, buildDeserializationArguments(args));
-                    case RETURN_TYPE_OLD_OBSERVABLE:
-                        return PlainDataModel.toOldObservable(cursor, modelClass, buildDeserializationArguments(args));
-                    case RETURN_TYPE_FLOWABLE:
-                        return PlainDataModel.toFlowable(cursor, modelClass, buildDeserializationArguments(args));
-                    case RETURN_TYPE_MAYBE:
-                        return PlainDataModel.toMaybe(cursor, modelClass, buildDeserializationArguments(args));
-                }
-            } finally {
-                lock.unlock();
-            }
-            return null;
-        }
-
-        private ModelDeserializationArguments buildDeserializationArguments(Object[] args) {
-            ModelDeserializationArguments mda = new ModelDeserializationArguments();
-            if (ctorParamNames != null) {
-                Map<String, Object> params = new ArrayMap<>(args.length);
-                int length = ctorParamNames.length;
-                for (int i = 0; i < length; i++) {
-                    String name = ctorParamNames[i];
-                    if (name == null) continue;
-                    params.put(name, args[i]);
-                }
-                mda.parameters = params;
-            }
-            if (conditionNames != null) {
-                Map<String, Predicate> conditions = new ArrayMap<>(args.length);
-                int length = conditionNames.length;
-                for (int i = 0; i < length; i++) {
-                    String name = conditionNames[i];
-                    if (name == null) continue;
-                    conditions.put(name, (Predicate) args[i]);
-                }
-                mda.conditions = conditions;
-            }
-            return mda;
-        }
-    }
-
-    private class DeleteInfo extends SelectableQueryInfo {
-        @Override
-        public Object query(OwlTable owl, Object[] args) {
-            NonStringArgumentBinder argBinder = bind(args);
-            lock.lock();
-            try {
-                SQLiteDatabase db = getWritableDatabase();
-                int affected = db.delete(owl.tableName, argBinder.selection, argBinder.selectionArgs);
-                switch (returnType) {
-                    case RETURN_TYPE_VOID:
-                        return null;
-                    case RETURN_TYPE_INT:
-                        return affected;
-                    case RETURN_TYPE_BOOLEAN:
-                        return affected != 0;
-                }
-            } finally {
-                lock.unlock();
-            }
-            return null;
-        }
-    }
-
-    private class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
-        ValueSetter valueSetter = new ValueSetter();
-        int conflictAlgorithm;
-
-        @Override
-        public ValueSetter valueSetter() {
-            return valueSetter;
-        }
-
-        @Override
-        public Object query(OwlTable owl, Object[] args) {
-            lock.lock();
-            try {
-                SQLiteDatabase db = getWritableDatabase();
-                ContentValues values = makeValues(valueSetter, args);
-                long retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
-                switch (returnType) {
-                    case RETURN_TYPE_VOID:
-                        return null;
-                    case RETURN_TYPE_LONG:
-                        return retVal;
-                    case RETURN_TYPE_BOOLEAN:
-                        return retVal != -1;
-                }
-            } finally {
-                lock.unlock();
-            }
-            return null;
-        }
-    }
-
-    private class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
-        ValueSetter valueSetter = new ValueSetter();
-
-        @Override
-        public ValueSetter valueSetter() {
-            return valueSetter;
-        }
-
-        @Override
-        public Object query(OwlTable owl, Object[] args) {
-            NonStringArgumentBinder argBinder = bind(args);
-            lock.lock();
-            try {
-                SQLiteDatabase db = getWritableDatabase();
-                ContentValues values = makeValues(valueSetter, args);
-                int retVal = db.update(owl.tableName, values, argBinder.selection, argBinder.selectionArgs);
-                switch (returnType) {
-                    case RETURN_TYPE_VOID:
-                        return null;
-                    case RETURN_TYPE_INT:
-                        return retVal;
-                    case RETURN_TYPE_BOOLEAN:
-                        return retVal != 0;
-                }
-            } finally {
-                lock.unlock();
-            }
-            return null;
-        }
-    }
-
-    private static class OwlTable {
-        private final String tableName;
-        private final Map<Method, QueryInfo> queryInfos = new ArrayMap<>();
-
-        volatile Object tableInterface;
-
-        OwlTable(String tableName) {
-            this.tableName = tableName;
-        }
-    }
+    static final ThreadLocal<List<Cursor>> cursors = new ThreadLocal<>();
 
     private final Map<Class, OwlTable> tables = new ArrayMap<>();
     private final ReentrantLock lock = new ReentrantLock();
@@ -338,7 +151,10 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
-                    if (rawType == List.class || rawType == ArrayList.class) {
+                    if (rawType == Iterable.class) {
+                        info.returnType = RETURN_TYPE_ITERABLE;
+                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                    } else if (rawType == List.class) {
                         info.returnType = RETURN_TYPE_LIST;
                         info.modelClass = OwlUtils.getActualType(pt, 0);
                     } else if (isFlowable(rawType)) {
@@ -704,5 +520,220 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = super.getWritableDatabase();
         setLockingDisabled(db);
         return db;
+    }
+
+    static abstract class QueryInfo {
+        int returnType;
+        Class modelClass;
+
+        public abstract Object query(OwlTable table, Object[] args);
+    }
+
+    static abstract class SelectableQueryInfo extends QueryInfo {
+        String selection;
+        boolean[] isSelectionArgument;
+
+        @NonNull
+        NonStringArgumentBinder bind(Object[] args) {
+            if (!TextUtils.isEmpty(selection)) {
+                return new NonStringArgumentBinder(selection, args, isSelectionArgument);
+            } else {
+                return new NonStringArgumentBinder();
+            }
+        }
+    }
+
+    private static class ValueSetter {
+        String[] argumentColumnNames;
+        boolean[] optional;
+        List<Map.Entry<String, Object>> constantValues;
+    }
+
+    interface ValueSettableQueryInfo {
+        ValueSetter valueSetter();
+    }
+
+    static List<Cursor> getCursorList(boolean forAdd) {
+        List<Cursor> list = OwlDatabaseOpenHelper.cursors.get();
+        if (list == null) {
+            if (forAdd) {
+                list = new ArrayList<>();
+                cursors.set(list);
+            } else {
+                list = Collections.emptyList();
+            }
+        }
+        return list;
+    }
+
+    public static void closeCursors() {
+        List<Cursor> list = getCursorList(false);
+        for (Cursor cursor : list) {
+            cursor.close();
+        }
+        list.clear();
+    }
+
+    private class SelectInfo extends SelectableQueryInfo {
+        String[] projection;
+        String orderBy;
+        String[] ctorParamNames;
+        String[] conditionNames;
+
+        @Override
+        public Object query(OwlTable owl, Object[] args) {
+            NonStringArgumentBinder argBinder = bind(args);
+            lock.lock();
+            try {
+                SQLiteDatabase db = getReadableDatabase();
+                final Cursor cursor = db.query(owl.tableName, projection, argBinder.selection, argBinder.selectionArgs,
+                        null, null, orderBy);
+                switch (returnType) {
+                    case RETURN_TYPE_BOOLEAN:
+                        boolean retVal = cursor.moveToNext();
+                        cursor.close();
+                        return retVal;
+                    case RETURN_TYPE_INT:
+                        int count = cursor.getCount();
+                        cursor.close();
+                        return count;
+                    case RETURN_TYPE_ITERABLE:
+                        getCursorList(true).add(cursor);
+                        return PlainDataModel.toIterable(cursor, modelClass, buildDeserializationArguments(args));
+                    case RETURN_TYPE_LIST:
+                        return PlainDataModel.toList(cursor, modelClass, buildDeserializationArguments(args));
+                    case RETURN_TYPE_OLD_OBSERVABLE:
+                        return PlainDataModel.toOldObservable(cursor, modelClass, buildDeserializationArguments(args));
+                    case RETURN_TYPE_FLOWABLE:
+                        return PlainDataModel.toFlowable(cursor, modelClass, buildDeserializationArguments(args));
+                    case RETURN_TYPE_MAYBE:
+                        return PlainDataModel.toMaybe(cursor, modelClass, buildDeserializationArguments(args));
+                }
+            } finally {
+                lock.unlock();
+            }
+            return null;
+        }
+
+        private ModelDeserializationArguments buildDeserializationArguments(Object[] args) {
+            ModelDeserializationArguments mda = new ModelDeserializationArguments();
+            if (ctorParamNames != null) {
+                Map<String, Object> params = new ArrayMap<>(args.length);
+                int length = ctorParamNames.length;
+                for (int i = 0; i < length; i++) {
+                    String name = ctorParamNames[i];
+                    if (name == null) continue;
+                    params.put(name, args[i]);
+                }
+                mda.parameters = params;
+            }
+            if (conditionNames != null) {
+                Map<String, Predicate> conditions = new ArrayMap<>(args.length);
+                int length = conditionNames.length;
+                for (int i = 0; i < length; i++) {
+                    String name = conditionNames[i];
+                    if (name == null) continue;
+                    conditions.put(name, (Predicate) args[i]);
+                }
+                mda.conditions = conditions;
+            }
+            return mda;
+        }
+    }
+
+    private class DeleteInfo extends SelectableQueryInfo {
+        @Override
+        public Object query(OwlTable owl, Object[] args) {
+            NonStringArgumentBinder argBinder = bind(args);
+            lock.lock();
+            try {
+                SQLiteDatabase db = getWritableDatabase();
+                int affected = db.delete(owl.tableName, argBinder.selection, argBinder.selectionArgs);
+                switch (returnType) {
+                    case RETURN_TYPE_VOID:
+                        return null;
+                    case RETURN_TYPE_INT:
+                        return affected;
+                    case RETURN_TYPE_BOOLEAN:
+                        return affected != 0;
+                }
+            } finally {
+                lock.unlock();
+            }
+            return null;
+        }
+    }
+
+    private class InsertInfo extends QueryInfo implements ValueSettableQueryInfo {
+        ValueSetter valueSetter = new ValueSetter();
+        int conflictAlgorithm;
+
+        @Override
+        public ValueSetter valueSetter() {
+            return valueSetter;
+        }
+
+        @Override
+        public Object query(OwlTable owl, Object[] args) {
+            lock.lock();
+            try {
+                SQLiteDatabase db = getWritableDatabase();
+                ContentValues values = makeValues(valueSetter, args);
+                long retVal = db.insertWithOnConflict(owl.tableName, null, values, conflictAlgorithm);
+                switch (returnType) {
+                    case RETURN_TYPE_VOID:
+                        return null;
+                    case RETURN_TYPE_LONG:
+                        return retVal;
+                    case RETURN_TYPE_BOOLEAN:
+                        return retVal != -1;
+                }
+            } finally {
+                lock.unlock();
+            }
+            return null;
+        }
+    }
+
+    private class UpdateInfo extends SelectableQueryInfo implements ValueSettableQueryInfo {
+        ValueSetter valueSetter = new ValueSetter();
+
+        @Override
+        public ValueSetter valueSetter() {
+            return valueSetter;
+        }
+
+        @Override
+        public Object query(OwlTable owl, Object[] args) {
+            NonStringArgumentBinder argBinder = bind(args);
+            lock.lock();
+            try {
+                SQLiteDatabase db = getWritableDatabase();
+                ContentValues values = makeValues(valueSetter, args);
+                int retVal = db.update(owl.tableName, values, argBinder.selection, argBinder.selectionArgs);
+                switch (returnType) {
+                    case RETURN_TYPE_VOID:
+                        return null;
+                    case RETURN_TYPE_INT:
+                        return retVal;
+                    case RETURN_TYPE_BOOLEAN:
+                        return retVal != 0;
+                }
+            } finally {
+                lock.unlock();
+            }
+            return null;
+        }
+    }
+
+    private static class OwlTable {
+        private final String tableName;
+        private final Map<Method, QueryInfo> queryInfos = new ArrayMap<>();
+
+        volatile Object tableInterface;
+
+        OwlTable(String tableName) {
+            this.tableName = tableName;
+        }
     }
 }

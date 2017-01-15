@@ -39,6 +39,9 @@ public interface UserTable {
     boolean userExists(@Where String name);
 
     @Query
+    Iterable<User> getAllIterable();
+
+    @Query
     List<User> getAllList();
 
     @Query
