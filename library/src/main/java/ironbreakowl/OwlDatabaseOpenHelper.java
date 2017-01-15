@@ -39,7 +39,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_FLOWABLE = 6;
     private static final int RETURN_TYPE_MAYBE = 7;
 
-    protected static final String PRIMARY_KEY = "primary key";
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
     protected static final String DEFAULT_NULL = "default null";
@@ -129,18 +128,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
             }
             return null;
         }
-    }
-
-    private static boolean isPrimitiveWrapper(Class clazz) {
-        return clazz == Boolean.class ||
-                clazz == Character.class ||
-                clazz == Byte.class ||
-                clazz == Short.class ||
-                clazz == Integer.class ||
-                clazz == Long.class ||
-                clazz == Float.class ||
-                clazz == Double.class ||
-                clazz == byte[].class;
     }
 
     private class DeleteInfo extends SelectableQueryInfo {
@@ -612,17 +599,17 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         return getOwlTable(clazz).mTableName;
     }
 
-    public void createTable(SQLiteDatabase db, Class clazz, String... columns) {
+    protected void createTable(SQLiteDatabase db, Class clazz, String... columns) {
         db.execSQL("create table " + getTableName(clazz) + '(' + TextUtils.join(",", columns) + ')');
     }
 
-    public void createIndex(SQLiteDatabase db, Class clazz, String... columns) {
+    protected void createIndex(SQLiteDatabase db, Class clazz, String... columns) {
         String tableName = getTableName(clazz);
         db.execSQL("create index " + tableName + '_' + TextUtils.join("_", columns) + " on "
                 + tableName + '(' + TextUtils.join(",", columns) + ')');
     }
 
-    public void addColumn(SQLiteDatabase db, Class clazz, String name, Class dataType) {
+    protected void addColumn(SQLiteDatabase db, Class clazz, String name, Class dataType) {
         String tableName = getTableName(clazz);
         db.execSQL("alter table " + tableName + " add column " + column(name, dataType));
     }
