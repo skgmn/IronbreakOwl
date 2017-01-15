@@ -19,9 +19,9 @@ public class QueryTest extends DataTestBase {
     @Override
     public void setup() {
         super.setup();
-        userTable.add("User1", true, "12341234");
-        userTable.add("User2", false, null);
-        userTable.add("User3", true, "00000000");
+        userTable.add("User1", true, "12341234", true, "111");
+        userTable.add("User2", false, null, true, "222");
+        userTable.add("User3", true, "00000000", false, "333");
     }
 
     @Test
@@ -73,18 +73,30 @@ public class QueryTest extends DataTestBase {
         test.assertNoValues();
     }
 
+    @Test
+    public void predicateArgument() {
+        List<User> values = userTable.getAllList(user -> true);
+        assertEquals("333", values.get(2).privateData);
+    }
+
     private void assertValues(List<User> values) {
         assertEquals("User1", values.get(0).name);
-        assertEquals(true, values.get(0).hasPhone);
+        assertTrue(values.get(0).hasPhone);
         assertEquals("12341234", values.get(0).phoneNumber);
+        assertTrue(values.get(0).isPublic);
+        assertEquals("111", values.get(0).privateData);
 
         assertEquals("User2", values.get(1).name);
         assertEquals(false, values.get(1).hasPhone);
         assertNull(values.get(1).phoneNumber);
+        assertTrue(values.get(1).isPublic);
+        assertEquals("222", values.get(1).privateData);
 
         assertEquals("User3", values.get(2).name);
         assertEquals(true, values.get(2).hasPhone);
         assertEquals("00000000", values.get(2).phoneNumber);
+        assertFalse(values.get(2).isPublic);
+        assertNull(values.get(2).privateData);
     }
 
     @Override

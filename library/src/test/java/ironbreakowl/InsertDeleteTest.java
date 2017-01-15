@@ -12,9 +12,9 @@ public class InsertDeleteTest extends DataTestBase {
     @Test
     public void insertAndClear() {
         UserTable userTable = openHelper.getTable(UserTable.class);
-        userTable.add("User1", true, "12341234");
-        userTable.add("User2", false, null);
-        userTable.add("User3", true, "00000000");
+        userTable.add("User1", true, "12341234", false, null);
+        userTable.add("User2", false, null, false, null);
+        userTable.add("User3", true, "00000000", false, null);
 
         Cursor cursor;
         cursor = openHelper.getReadableDatabase().rawQuery(

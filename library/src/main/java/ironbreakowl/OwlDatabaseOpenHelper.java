@@ -80,22 +80,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private class SelectInfo extends SelectableQueryInfo {
         String[] projection;
         String orderBy;
-        String[] passedParameterNames;
-
-        private Map<String, Object> buildPassedParameters(Object[] args) {
-            if (passedParameterNames != null) {
-                Map<String, Object> params = new ArrayMap<>(args.length);
-                int length = passedParameterNames.length;
-                for (int i = 0; i < length; i++) {
-                    String name = passedParameterNames[i];
-                    if (name == null) continue;
-                    params.put(name, args[i]);
-                }
-                return params;
-            } else {
-                return null;
-            }
-        }
+        String[] ctorParamNames;
+        String[] conditionNames;
 
         @Override
         public Object query(OwlTable owl, Object[] args) {
@@ -115,18 +101,43 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         cursor.close();
                         return count;
                     case RETURN_TYPE_LIST:
-                        return PlainDataModel.toList(cursor, modelClass, buildPassedParameters(args));
+                        return PlainDataModel.toList(cursor, modelClass, buildDeserializationArguments(args));
                     case RETURN_TYPE_OLD_OBSERVABLE:
-                        return PlainDataModel.toOldObservable(cursor, modelClass, buildPassedParameters(args));
+                        return PlainDataModel.toOldObservable(cursor, modelClass, buildDeserializationArguments(args));
                     case RETURN_TYPE_FLOWABLE:
-                        return PlainDataModel.toFlowable(cursor, modelClass, buildPassedParameters(args));
+                        return PlainDataModel.toFlowable(cursor, modelClass, buildDeserializationArguments(args));
                     case RETURN_TYPE_MAYBE:
-                        return PlainDataModel.toMaybe(cursor, modelClass, buildPassedParameters(args));
+                        return PlainDataModel.toMaybe(cursor, modelClass, buildDeserializationArguments(args));
                 }
             } finally {
                 lock.unlock();
             }
             return null;
+        }
+
+        private ModelDeserializationArguments buildDeserializationArguments(Object[] args) {
+            ModelDeserializationArguments mda = new ModelDeserializationArguments();
+            if (ctorParamNames != null) {
+                Map<String, Object> params = new ArrayMap<>(args.length);
+                int length = ctorParamNames.length;
+                for (int i = 0; i < length; i++) {
+                    String name = ctorParamNames[i];
+                    if (name == null) continue;
+                    params.put(name, args[i]);
+                }
+                mda.parameters = params;
+            }
+            if (conditionNames != null) {
+                Map<String, Predicate> conditions = new ArrayMap<>(args.length);
+                int length = conditionNames.length;
+                for (int i = 0; i < length; i++) {
+                    String name = conditionNames[i];
+                    if (name == null) continue;
+                    conditions.put(name, (Predicate) args[i]);
+                }
+                mda.conditions = conditions;
+            }
+            return mda;
         }
     }
 
@@ -306,15 +317,19 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
                 Annotation[][] annotations = method.getParameterAnnotations();
                 int length = annotations.length;
-                if (length != 0) {
-                    info.passedParameterNames = new String[length];
-                    for (int i = 0; i < length; ++i) {
-                        Annotation[] parameterAnnotations = annotations[i];
-                        for (Annotation annotation : parameterAnnotations) {
-                            if (annotation instanceof Parameter) {
-                                info.passedParameterNames[i] = ((Parameter) annotation).value();
-                                break;
+                for (int i = 0; i < length; ++i) {
+                    for (Annotation annotation : annotations[i]) {
+                        if (annotation instanceof Parameter) {
+                            if (info.ctorParamNames == null) {
+                                info.ctorParamNames = new String[length];
                             }
+                            info.ctorParamNames[i] = ((Parameter) annotation).value();
+                            break;
+                        } else if (annotation instanceof Condition) {
+                            if (info.conditionNames == null) {
+                                info.conditionNames = new String[length];
+                            }
+                            info.conditionNames[i] = ((Condition) annotation).value();
                         }
                     }
                 }

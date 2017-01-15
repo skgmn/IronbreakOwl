@@ -3,8 +3,6 @@ package ironbreakowl.data;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 
-import org.junit.Ignore;
-
 import ironbreakowl.OwlDatabaseOpenHelper;
 
 public class OpenHelper extends OwlDatabaseOpenHelper {
@@ -17,7 +15,9 @@ public class OpenHelper extends OwlDatabaseOpenHelper {
         createTable(db, UserTable.class,
                 column(UserTable.NAME, String.class),
                 column(UserTable.HAS_PHONE, Boolean.class),
-                column(UserTable.PHONE_NUMBER, String.class));
+                column(UserTable.PHONE_NUMBER, String.class),
+                column(UserTable.IS_PUBLIC, Boolean.class),
+                column(UserTable.PRIVATE_DATA, String.class));
     }
 
     @Override

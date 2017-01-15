@@ -13,6 +13,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,9 +28,10 @@ class PlainDataModel {
     private static final Map<Class, PlainDataModel> models = new ArrayMap<>();
 
     private final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
-    private Constructor constructor;
-    private String[] passedParameterNames;
-    private FieldInfo[] parameters;
+    private Constructor ctor;
+    private String[] ctorParamNames;
+    private FieldInfo[] ctorColumns;
+    private Map<String, Method> conditionMethods;
 
     static void putInto(ContentValues values, Object o) {
         Class<?> clazz = o.getClass();
@@ -50,12 +52,13 @@ class PlainDataModel {
         }
     }
 
-    static <T> ArrayList<T> toList(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+    static <T> ArrayList<T> toList(final Cursor cursor, Class<T> clazz,
+                                   ModelDeserializationArguments args) {
         final PlainDataModel model = getModel(clazz);
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
             try {
-                T obj = model.fetchRow(cursor, passedParameters);
+                T obj = model.fetchRow(cursor, args);
                 list.add(obj);
             } catch (RuntimeException e) {
                 throw e;
@@ -67,7 +70,8 @@ class PlainDataModel {
         return list;
     }
 
-    static <T> Flowable<T> toFlowable(final Cursor cursor, Class<T> clazz, Map<String, Object> passedParameters) {
+    static <T> Flowable<T> toFlowable(final Cursor cursor, Class<T> clazz,
+                                      ModelDeserializationArguments args) {
         return Flowable.unsafeCreate(new Publisher<T>() {
             @Override
             public void subscribe(Subscriber<? super T> s) {
@@ -83,7 +87,7 @@ class PlainDataModel {
                             for (int i = 0; i < n && !canceled; ++i) {
                                 final boolean complete;
                                 if (cursor.moveToNext()) {
-                                    T obj = model.fetchRow(cursor, passedParameters);
+                                    T obj = model.fetchRow(cursor, args);
                                     s.onNext(obj);
                                     complete = cursor.isLast();
                                 } else {
@@ -118,12 +122,12 @@ class PlainDataModel {
     }
 
     static <T> Maybe<T> toMaybe(final Cursor cursor, Class<T> clazz,
-                                Map<String, Object> passedParameters) {
+                                ModelDeserializationArguments args) {
         return Maybe.create(emitter -> {
             final PlainDataModel model = getModel(clazz);
             try {
                 if (cursor.moveToNext()) {
-                    T obj = model.fetchRow(cursor, passedParameters);
+                    T obj = model.fetchRow(cursor, args);
                     emitter.onSuccess(obj);
                 } else {
                     emitter.onComplete();
@@ -137,7 +141,7 @@ class PlainDataModel {
     }
 
     static <T> Observable<T> toOldObservable(final Cursor cursor, Class<T> clazz,
-                                             Map<String, Object> passedParameters) {
+                                             ModelDeserializationArguments args) {
         return Observable.create(new Observable.OnSubscribe<T>() {
             private volatile boolean reading;
 
@@ -150,7 +154,7 @@ class PlainDataModel {
                         for (int i = 0; i < n && !s.isUnsubscribed(); ++i) {
                             final boolean complete;
                             if (cursor.moveToNext()) {
-                                T obj = model.fetchRow(cursor, passedParameters);
+                                T obj = model.fetchRow(cursor, args);
                                 s.onNext(obj);
                                 complete = cursor.isLast();
                             } else {
@@ -181,28 +185,29 @@ class PlainDataModel {
     }
 
     @SuppressWarnings("WeakerAccess")
-    <T> T fetchRow(Cursor cursor, Map<String, Object> passedParameters)
+    <T> T fetchRow(Cursor cursor, ModelDeserializationArguments args)
             throws InstantiationException, IllegalAccessException {
         T obj;
         try {
-            FieldInfo[] parameters = this.parameters;
-            String[] passedParameterNames = this.passedParameterNames;
-            if (parameters == null && passedParameterNames == null) {
+            FieldInfo[] columns = this.ctorColumns;
+            String[] parameterNames = this.ctorParamNames;
+            if (columns == null && parameterNames == null) {
                 //noinspection unchecked
-                obj = (T) constructor.newInstance();
+                obj = (T) ctor.newInstance();
             } else {
-                int length = parameters != null ? parameters.length : passedParameterNames.length;
+                int length = columns != null ? columns.length : parameterNames.length;
+                Map<String, Object> parameters = args.parameters;
                 Object[] params = new Object[length];
                 for (int i = 0; i < length; ++i) {
-                    if (passedParameterNames != null && passedParameters != null) {
-                        String passedParameterName = passedParameterNames[i];
-                        if (passedParameterName != null) {
-                            params[i] = passedParameters.get(passedParameterName);
+                    if (parameterNames != null && parameters != null) {
+                        String parameterName = parameterNames[i];
+                        if (parameterName != null) {
+                            params[i] = parameters.get(parameterName);
                             continue;
                         }
                     }
-                    if (parameters != null) {
-                        FieldInfo fieldInfo = parameters[i];
+                    if (columns != null) {
+                        FieldInfo fieldInfo = columns[i];
                         if (fieldInfo != null) {
                             params[i] = OwlUtils.readValue(cursor,
                                     cursor.getColumnIndex(fieldInfo.column.value()),
@@ -213,18 +218,47 @@ class PlainDataModel {
                     throw new IllegalStateException();
                 }
                 //noinspection unchecked
-                obj = (T) constructor.newInstance(params);
+                obj = (T) ctor.newInstance(params);
             }
         } catch (InvocationTargetException e) {
             throw new RuntimeException(e);
         }
 
-        for (Pair<Field, FieldInfo> pair : fields) {
-            Field field = pair.first;
-            FieldInfo fieldInfo = pair.second;
-            String columnName = fieldInfo.column.value();
-            int columnIndex = cursor.getColumnIndex(columnName);
-            OwlUtils.readValue(cursor, columnIndex, fieldInfo, obj, field);
+        for (int i = 0; i < 2; ++i) {
+            boolean cond = i == 1;
+            for (Pair<Field, FieldInfo> pair : fields) {
+                FieldInfo fieldInfo = pair.second;
+                if (fieldInfo.conditional != cond) {
+                    continue;
+                }
+                String columnName = fieldInfo.column.value();
+                if (cond) {
+                    boolean pass;
+                    Predicate predicate = args.getPredicate(columnName);
+                    if (predicate != null) {
+                        //noinspection unchecked
+                        pass = !predicate.test(obj);
+                    } else {
+                        pass = false;
+                        if (conditionMethods != null) {
+                            Method method = conditionMethods.get(columnName);
+                            if (method != null) {
+                                try {
+                                    pass = !(boolean) method.invoke(obj);
+                                } catch (InvocationTargetException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                        }
+                    }
+                    if (pass) {
+                        continue;
+                    }
+                }
+                Field field = pair.first;
+                int columnIndex = cursor.getColumnIndex(columnName);
+                OwlUtils.readValue(cursor, columnIndex, fieldInfo, obj, field);
+            }
         }
         return obj;
     }
@@ -265,28 +299,28 @@ class PlainDataModel {
                 }
             }
             if (isEligible) {
-                if (model.constructor != null) {
+                if (model.ctor != null) {
                     throw new IllegalArgumentException("Multiple constructor found for " + clazz.getCanonicalName());
                 }
-                model.constructor = ctor;
+                model.ctor = ctor;
                 ctor.setAccessible(true);
                 for (int i = 0; i < length; ++i) {
                     Annotation[] parameterAnnotations = annotations[i];
                     boolean unknown = parameterAnnotations.length == 0;
                     for (Annotation annotation : parameterAnnotations) {
                         if (annotation instanceof Parameter) {
-                            if (model.passedParameterNames == null) {
-                                model.passedParameterNames = new String[length];
+                            if (model.ctorParamNames == null) {
+                                model.ctorParamNames = new String[length];
                             }
-                            model.passedParameterNames[i] = ((Parameter) annotation).value();
+                            model.ctorParamNames[i] = ((Parameter) annotation).value();
                         } else if (annotation instanceof Column) {
-                            if (model.parameters == null) {
-                                model.parameters = new FieldInfo[length];
+                            if (model.ctorColumns == null) {
+                                model.ctorColumns = new FieldInfo[length];
                             }
                             FieldInfo fieldInfo = new FieldInfo();
                             fieldInfo.column = (Column) annotation;
                             fieldInfo.setType(ctor.getParameterTypes()[i]);
-                            model.parameters[i] = fieldInfo;
+                            model.ctorColumns[i] = fieldInfo;
                         } else {
                             unknown = true;
                             break;
@@ -299,9 +333,24 @@ class PlainDataModel {
                 }
             }
         }
-        if (model.constructor == null) {
+        if (model.ctor == null) {
             throw new IllegalArgumentException("Couldn't find proper constructor for "
                     + clazz.getCanonicalName());
+        }
+
+        for (Method method : clazz.getDeclaredMethods()) {
+            Condition cond = method.getAnnotation(Condition.class);
+            if (cond != null) {
+                if (model.conditionMethods == null) {
+                    model.conditionMethods = new ArrayMap<>();
+                }
+                String conditionName = cond.value();
+                method.setAccessible(true);
+                if (model.conditionMethods.put(conditionName, method) != null) {
+                    throw new IllegalArgumentException("Multiple condition methods for "
+                            + conditionName);
+                }
+            }
         }
 
         List<Pair<Field, FieldInfo>> fields = model.fields;
@@ -314,6 +363,7 @@ class PlainDataModel {
                 Class<?> fieldType = field.getType();
                 fieldInfo.column = column;
                 fieldInfo.setType(fieldType);
+                fieldInfo.conditional = field.getAnnotation(Conditional.class) != null;
                 field.setAccessible(true);
                 fields.add(new Pair<>(field, fieldInfo));
             }
