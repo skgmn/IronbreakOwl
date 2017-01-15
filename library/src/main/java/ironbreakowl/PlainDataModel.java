@@ -2,6 +2,7 @@ package ironbreakowl;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.support.v4.util.ArrayMap;
 import android.util.Pair;
 
 import org.reactivestreams.Publisher;
@@ -14,7 +15,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +24,7 @@ import rx.Observable;
 import rx.subscriptions.Subscriptions;
 
 class PlainDataModel {
-    private static final HashMap<Class, PlainDataModel> models = new HashMap<>();
+    private static final Map<Class, PlainDataModel> models = new ArrayMap<>();
 
     private final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
     private Constructor constructor;

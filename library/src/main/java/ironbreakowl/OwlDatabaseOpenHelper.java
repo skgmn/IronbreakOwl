@@ -8,6 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Build;
 import android.os.Parcelable;
 import android.support.annotation.NonNull;
+import android.support.v4.util.ArrayMap;
 import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
@@ -18,7 +19,6 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -84,7 +84,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         private Map<String, Object> buildPassedParameters(Object[] args) {
             if (passedParameterNames != null) {
-                Map<String, Object> params = new HashMap<>(args.length);
+                Map<String, Object> params = new ArrayMap<>(args.length);
                 int length = passedParameterNames.length;
                 for (int i = 0; i < length; i++) {
                     String name = passedParameterNames[i];
@@ -217,7 +217,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
     private static class OwlTable {
         private final String mTableName;
-        private final HashMap<Method, QueryInfo> mQueryInfos = new HashMap<>();
+        private final Map<Method, QueryInfo> mQueryInfos = new ArrayMap<>();
 
         Object tableInterface;
 
@@ -226,7 +226,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
     }
 
-    private final HashMap<Class, OwlTable> mTables = new HashMap<>();
+    private final Map<Class, OwlTable> mTables = new ArrayMap<>();
     private final ReentrantLock mLock = new ReentrantLock();
     private WeakReference<SQLiteDatabase> mLockingDisabledDatabase;
 
