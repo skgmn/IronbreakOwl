@@ -55,7 +55,7 @@ class PlainDataModel {
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
             try {
-                T obj = fetchRow(cursor, model, passedParameters);
+                T obj = model.fetchRow(cursor, passedParameters);
                 list.add(obj);
             } catch (RuntimeException e) {
                 throw e;
@@ -83,7 +83,7 @@ class PlainDataModel {
                             for (int i = 0; i < n && !canceled; ++i) {
                                 final boolean complete;
                                 if (cursor.moveToNext()) {
-                                    T obj = fetchRow(cursor, model, passedParameters);
+                                    T obj = model.fetchRow(cursor, passedParameters);
                                     s.onNext(obj);
                                     complete = cursor.isLast();
                                 } else {
@@ -123,7 +123,7 @@ class PlainDataModel {
             final PlainDataModel model = getModel(clazz);
             try {
                 if (cursor.moveToNext()) {
-                    T obj = fetchRow(cursor, model, passedParameters);
+                    T obj = model.fetchRow(cursor, passedParameters);
                     emitter.onSuccess(obj);
                 } else {
                     emitter.onComplete();
@@ -150,7 +150,7 @@ class PlainDataModel {
                         for (int i = 0; i < n && !s.isUnsubscribed(); ++i) {
                             final boolean complete;
                             if (cursor.moveToNext()) {
-                                T obj = fetchRow(cursor, model, passedParameters);
+                                T obj = model.fetchRow(cursor, passedParameters);
                                 s.onNext(obj);
                                 complete = cursor.isLast();
                             } else {
@@ -180,16 +180,16 @@ class PlainDataModel {
         });
     }
 
-    private static <T> T fetchRow(Cursor cursor, PlainDataModel model,
-                                  Map<String, Object> passedParameters)
+    @SuppressWarnings("WeakerAccess")
+    <T> T fetchRow(Cursor cursor, Map<String, Object> passedParameters)
             throws InstantiationException, IllegalAccessException {
         T obj;
         try {
-            FieldInfo[] parameters = model.parameters;
-            String[] passedParameterNames = model.passedParameterNames;
+            FieldInfo[] parameters = this.parameters;
+            String[] passedParameterNames = this.passedParameterNames;
             if (parameters == null && passedParameterNames == null) {
                 //noinspection unchecked
-                obj = (T) model.constructor.newInstance();
+                obj = (T) constructor.newInstance();
             } else {
                 int length = parameters != null ? parameters.length : passedParameterNames.length;
                 Object[] params = new Object[length];
@@ -213,13 +213,13 @@ class PlainDataModel {
                     throw new IllegalStateException();
                 }
                 //noinspection unchecked
-                obj = (T) model.constructor.newInstance(params);
+                obj = (T) constructor.newInstance(params);
             }
         } catch (InvocationTargetException e) {
             throw new RuntimeException(e);
         }
 
-        for (Pair<Field, FieldInfo> pair : model.fields) {
+        for (Pair<Field, FieldInfo> pair : fields) {
             Field field = pair.first;
             FieldInfo fieldInfo = pair.second;
             String columnName = fieldInfo.column.value();
