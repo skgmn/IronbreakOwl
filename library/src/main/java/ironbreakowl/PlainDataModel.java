@@ -2,8 +2,6 @@ package ironbreakowl;
 
 import android.content.ContentValues;
 import android.database.Cursor;
-import android.os.Parcel;
-import android.os.Parcelable;
 import android.util.Pair;
 
 import org.reactivestreams.Publisher;
@@ -27,17 +25,6 @@ import rx.subscriptions.Subscriptions;
 
 class PlainDataModel {
     private static final HashMap<Class, PlainDataModel> models = new HashMap<>();
-
-    private static class FieldInfo {
-        Column column;
-        Class type;
-        Parcelable.Creator parcelCreator;
-
-        void setType(Class type) {
-            this.type = type;
-            parcelCreator = Parcelable.class.isAssignableFrom(type) ? OwlUtils.getParcelCreator(type) : null;
-        }
-    }
 
     private final List<Pair<Field, FieldInfo>> fields = new ArrayList<>();
     private Constructor constructor;
@@ -219,8 +206,7 @@ class PlainDataModel {
                         if (fieldInfo != null) {
                             params[i] = OwlUtils.readValue(cursor,
                                     cursor.getColumnIndex(fieldInfo.column.value()),
-                                    fieldInfo.type,
-                                    fieldInfo.parcelCreator);
+                                    fieldInfo, null, null);
                             continue;
                         }
                     }
@@ -238,45 +224,7 @@ class PlainDataModel {
             FieldInfo fieldInfo = pair.second;
             String columnName = fieldInfo.column.value();
             int columnIndex = cursor.getColumnIndex(columnName);
-            Class type = fieldInfo.type;
-            if (type == Integer.TYPE) {
-                field.setInt(obj, cursor.getInt(columnIndex));
-            } else if (type == Integer.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex));
-            } else if (type == String.class) {
-                field.set(obj, cursor.getString(columnIndex));
-            } else if (type == Long.TYPE) {
-                field.setLong(obj, cursor.getLong(columnIndex));
-            } else if (type == Long.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex));
-            } else if (type == byte[].class) {
-                field.set(obj, cursor.getBlob(columnIndex));
-            } else if (type == Boolean.TYPE) {
-                field.setBoolean(obj, cursor.getInt(columnIndex) != 0);
-            } else if (type == Boolean.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0);
-            } else if (type == Float.TYPE) {
-                field.setFloat(obj, cursor.getFloat(columnIndex));
-            } else if (type == Float.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex));
-            } else if (type == Double.TYPE) {
-                field.setDouble(obj, cursor.getDouble(columnIndex));
-            } else if (type == Double.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex));
-            } else if (type == Short.TYPE) {
-                field.setShort(obj, cursor.getShort(columnIndex));
-            } else if (type == Short.class) {
-                field.set(obj, cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex));
-            } else if (Parcelable.class.isAssignableFrom(type)) {
-                Parcel parcel = Parcel.obtain();
-                byte[] bytes = cursor.getBlob(columnIndex);
-                parcel.unmarshall(bytes, 0, bytes.length);
-                parcel.setDataPosition(0);
-                field.set(obj, fieldInfo.parcelCreator.createFromParcel(parcel));
-                parcel.recycle();
-            } else {
-                throw new IllegalArgumentException("Unsupported type: " + type.getCanonicalName());
-            }
+            OwlUtils.readValue(cursor, columnIndex, fieldInfo, obj, field);
         }
         return obj;
     }

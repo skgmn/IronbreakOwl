@@ -12,49 +12,102 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 
 class OwlUtils {
-    static Object readValue(Cursor cursor, int columnIndex, Class clazz,
-                            @Nullable Parcelable.Creator parcelCreator) {
-        if (clazz == Integer.TYPE) {
-            return cursor.getInt(columnIndex);
-        } else if (clazz == Integer.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex);
+    static Object readValue(Cursor cursor, int columnIndex, FieldInfo fieldInfo,
+                            @Nullable Object obj, @Nullable Field field) {
+        Class clazz = fieldInfo.type;
+        try {
+            if (clazz == Integer.TYPE) {
+                int value = cursor.getInt(columnIndex);
+                if (field != null) {
+                    field.setInt(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            } else if (clazz == Long.TYPE) {
+                long value = cursor.getLong(columnIndex);
+                if (field != null) {
+                    field.setLong(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            } else if (clazz == Boolean.TYPE) {
+                boolean value = cursor.getInt(columnIndex) != 0;
+                if (field != null) {
+                    field.setBoolean(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            } else if (clazz == Double.TYPE) {
+                double value = cursor.getDouble(columnIndex);
+                if (field != null) {
+                    field.setDouble(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            } else if (clazz == Float.TYPE) {
+                float value = cursor.getFloat(columnIndex);
+                if (field != null) {
+                    field.setFloat(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            } else if (clazz == Short.TYPE) {
+                short value = cursor.getShort(columnIndex);
+                if (field != null) {
+                    field.setShort(obj, value);
+                    return null;
+                } else {
+                    return value;
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+        Object value;
+        if (clazz == Integer.class) {
+            value = cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex);
         } else if (clazz == String.class) {
-            return cursor.getString(columnIndex);
-        } else if (clazz == Long.TYPE) {
-            return cursor.getLong(columnIndex);
+            value = cursor.getString(columnIndex);
         } else if (clazz == Long.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex);
-        } else if (clazz == Boolean.TYPE) {
-            return cursor.getInt(columnIndex) != 0;
+            value = cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex);
         } else if (clazz == Boolean.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0;
+            value = cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0;
         } else if (clazz == byte[].class) {
-            return cursor.getBlob(columnIndex);
-        } else if (clazz == Float.TYPE) {
-            return cursor.getFloat(columnIndex);
+            value = cursor.getBlob(columnIndex);
         } else if (clazz == Float.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex);
-        } else if (clazz == Double.TYPE) {
-            return cursor.getDouble(columnIndex);
+            value = cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex);
         } else if (clazz == Double.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex);
-        } else if (clazz == Short.TYPE) {
-            return cursor.getShort(columnIndex);
+            value = cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex);
         } else if (clazz == Short.class) {
-            return cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex);
+            value = cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex);
         } else if (Parcelable.class.isAssignableFrom(clazz)) {
             Parcel parcel = Parcel.obtain();
             byte[] bytes = cursor.getBlob(columnIndex);
             parcel.unmarshall(bytes, 0, bytes.length);
             parcel.setDataPosition(0);
+            Parcelable.Creator parcelCreator = fieldInfo.parcelCreator;
             if (parcelCreator == null) {
                 parcelCreator = getParcelCreator(clazz);
             }
-            Object obj = parcelCreator.createFromParcel(parcel);
+            value = parcelCreator.createFromParcel(parcel);
             parcel.recycle();
-            return obj;
         } else {
             throw new IllegalArgumentException("Unsupported type: " + clazz.getCanonicalName());
+        }
+        try {
+            if (field != null) {
+                field.set(obj, value);
+                return null;
+            } else {
+                return value;
+            }
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
         }
     }
 
