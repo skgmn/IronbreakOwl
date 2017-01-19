@@ -36,17 +36,11 @@ public class QueryTest extends DataTestBase {
 
     @Test
     public void queryIterable() {
-        // To test closeCursors() does not crash when the list is empty
-        OwlDatabaseOpenHelper.closeCursors();
-
         List<User> list = new ArrayList<>();
         Iterable<User> iterable = userTable.getAllIterable();
-        assertEquals(1, OwlDatabaseOpenHelper.getCursorList(false).size());
         for (User user : iterable) {
             list.add(user);
         }
-        OwlDatabaseOpenHelper.closeCursors();
-        assertTrue(OwlDatabaseOpenHelper.getCursorList(false).isEmpty());
         assertValues(list);
     }
 

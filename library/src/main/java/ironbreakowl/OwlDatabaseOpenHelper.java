@@ -12,6 +12,7 @@ import android.support.v4.util.ArrayMap;
 import android.text.TextUtils;
 
 import java.lang.annotation.Annotation;
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -19,7 +20,6 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -48,10 +48,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
 
-    static final ThreadLocal<List<Cursor>> cursors = new ThreadLocal<>();
-
     private final Map<Class, OwlTable> tables = new ArrayMap<>();
     private final ReentrantLock lock = new ReentrantLock();
+    private final ReferenceQueue<Iterable> iterableRefQueue = new ReferenceQueue<>();
     private WeakReference<SQLiteDatabase> lockingDisabledDatabase;
 
     public OwlDatabaseOpenHelper(Context context, String name, SQLiteDatabase.CursorFactory factory, int version) {
@@ -72,6 +71,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (owl.tableInterface == null) {
                     tableInterface = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz},
                             (proxy, method, args) -> {
+                                closeCursors();
                                 QueryInfo queryInfo = owl.queryInfos.get(method);
                                 if (queryInfo == null) {
                                     throw new UnsupportedOperationException();
@@ -86,6 +86,14 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         }
         //noinspection unchecked
         return (T) tableInterface;
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    void closeCursors() {
+        CursorCloser closer;
+        while ((closer = (CursorCloser) iterableRefQueue.poll()) != null) {
+            closer.close();
+        }
     }
 
     @NonNull
@@ -553,27 +561,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         ValueSetter valueSetter();
     }
 
-    static List<Cursor> getCursorList(boolean forAdd) {
-        List<Cursor> list = OwlDatabaseOpenHelper.cursors.get();
-        if (list == null) {
-            if (forAdd) {
-                list = new ArrayList<>();
-                cursors.set(list);
-            } else {
-                list = Collections.emptyList();
-            }
-        }
-        return list;
-    }
-
-    public static void closeCursors() {
-        List<Cursor> list = getCursorList(false);
-        for (Cursor cursor : list) {
-            cursor.close();
-        }
-        list.clear();
-    }
-
     private class SelectInfo extends SelectableQueryInfo {
         String[] projection;
         String orderBy;
@@ -598,8 +585,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         cursor.close();
                         return count;
                     case RETURN_TYPE_ITERABLE:
-                        getCursorList(true).add(cursor);
-                        return PlainDataModel.toIterable(cursor, modelClass, buildDeserializationArguments(args));
+                        Iterable iterable = PlainDataModel.toIterable(cursor, modelClass, buildDeserializationArguments(args));
+                        new CursorCloser<>(cursor, iterable, iterableRefQueue);
+                        return iterable;
                     case RETURN_TYPE_LIST:
                         return PlainDataModel.toList(cursor, modelClass, buildDeserializationArguments(args));
                     case RETURN_TYPE_OLD_OBSERVABLE:

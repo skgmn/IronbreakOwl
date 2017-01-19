@@ -87,18 +87,13 @@ class PlainDataModel {
                     private boolean hasNext;
                     private boolean hasNextCalled;
 
-                    private void closeCursor() {
-                        cursor.close();
-                        OwlDatabaseOpenHelper.getCursorList(false).remove(cursor);
-                    }
-
                     @Override
                     public boolean hasNext() {
                         if (!hasNextCalled) {
                             hasNextCalled = true;
                             hasNext = cursor.moveToNext();
                             if (!hasNext) {
-                                closeCursor();
+                                cursor.close();
                             }
                         }
                         return hasNext;
@@ -109,9 +104,9 @@ class PlainDataModel {
                         try {
                             T obj = model.fetchRow(cursor, args);
                             if (cursor.isLast()) {
-                                closeCursor();
                                 hasNextCalled = true;
                                 hasNext = false;
+                                cursor.close();
                             } else {
                                 hasNextCalled = false;
                             }
