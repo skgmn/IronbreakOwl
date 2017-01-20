@@ -283,11 +283,12 @@ class PlainDataModel {
                 if (model.conditionMethods == null) {
                     model.conditionMethods = new ArrayMap<>();
                 }
-                String conditionName = cond.value();
                 method.setAccessible(true);
-                if (model.conditionMethods.put(conditionName, method) != null) {
-                    throw new IllegalArgumentException("Multiple condition methods for "
-                            + conditionName);
+                for (String conditionName : cond.value()) {
+                    if (model.conditionMethods.put(conditionName, method) != null) {
+                        throw new IllegalArgumentException("Multiple condition methods for "
+                                + conditionName);
+                    }
                 }
             }
         }

@@ -638,7 +638,9 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                             if (conditions == null) {
                                 conditions = new ArrayMap<>();
                             }
-                            conditions.put(((Condition) a).value(), (Predicate) arg);
+                            for (String columnName : ((Condition) a).value()) {
+                                conditions.put(columnName, (Predicate) arg);
+                            }
                         }
                     }
                 }
