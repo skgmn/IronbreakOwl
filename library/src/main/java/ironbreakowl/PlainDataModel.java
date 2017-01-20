@@ -247,7 +247,7 @@ class PlainDataModel {
             obj = (T) ctor.newInstance();
         } else {
             int length = columns != null ? columns.length : parameterNames.length;
-            Map<String, Object> parameters = args.parameters;
+            Map<String, Object> parameters = args.ctorParams;
             Object[] params = new Object[length];
             for (int i = 0; i < length; ++i) {
                 if (parameterNames != null && parameters != null) {

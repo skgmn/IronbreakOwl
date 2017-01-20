@@ -136,24 +136,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 }
                 parseParameters(method, info);
 
-                Annotation[][] annotations = method.getParameterAnnotations();
-                int length = annotations.length;
-                for (int i = 0; i < length; ++i) {
-                    for (Annotation annotation : annotations[i]) {
-                        if (annotation instanceof Parameter) {
-                            if (info.ctorParamNames == null) {
-                                info.ctorParamNames = new String[length];
-                            }
-                            info.ctorParamNames[i] = ((Parameter) annotation).value();
-                            break;
-                        } else if (annotation instanceof Condition) {
-                            if (info.conditionNames == null) {
-                                info.conditionNames = new String[length];
-                            }
-                            info.conditionNames[i] = ((Condition) annotation).value();
-                        }
-                    }
-                }
+                info.paramAnnotations = method.getParameterAnnotations();
 
                 Type returnType = method.getGenericReturnType();
                 if (returnType instanceof ParameterizedType) {
@@ -564,8 +547,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private class SelectInfo extends SelectableQueryInfo {
         String[] projection;
         String orderBy;
-        String[] ctorParamNames;
-        String[] conditionNames;
+        Annotation[][] paramAnnotations;
 
         @Override
         public Object query(OwlTable owl, Object[] args) {
@@ -605,24 +587,34 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         private ModelDeserializationArguments buildDeserializationArguments(Object[] args) {
             ModelDeserializationArguments mda = new ModelDeserializationArguments();
-            if (ctorParamNames != null) {
-                Map<String, Object> params = new ArrayMap<>(args.length);
-                int length = ctorParamNames.length;
-                for (int i = 0; i < length; i++) {
-                    String name = ctorParamNames[i];
-                    if (name == null) continue;
-                    params.put(name, args[i]);
+            if (paramAnnotations != null && args != null) {
+                int argLength = args.length;
+                if (paramAnnotations.length != argLength) {
+                    throw new IllegalArgumentException();
                 }
-                mda.parameters = params;
-            }
-            if (conditionNames != null) {
-                Map<String, Predicate> conditions = new ArrayMap<>(args.length);
-                int length = conditionNames.length;
-                for (int i = 0; i < length; i++) {
-                    String name = conditionNames[i];
-                    if (name == null) continue;
-                    conditions.put(name, (Predicate) args[i]);
+                Map<String, Object> ctorParams = null;
+                Map<String, Predicate> conditions = null;
+                for (int i = 0; i < argLength; ++i) {
+                    Annotation[] annotations = paramAnnotations[i];
+                    Object arg = args[i];
+                    for (Annotation a : annotations) {
+                        if (a instanceof Parameter) {
+                            if (ctorParams == null) {
+                                ctorParams = new ArrayMap<>();
+                            }
+                            ctorParams.put(((Parameter) a).value(), arg);
+                        } else if (a instanceof Condition) {
+                            if (!(arg instanceof Predicate)) {
+                                throw new IllegalArgumentException("A parameter with @Condition should be Predicate");
+                            }
+                            if (conditions == null) {
+                                conditions = new ArrayMap<>();
+                            }
+                            conditions.put(((Condition) a).value(), (Predicate) arg);
+                        }
+                    }
                 }
+                mda.ctorParams = ctorParams;
                 mda.conditions = conditions;
             }
             return mda;
