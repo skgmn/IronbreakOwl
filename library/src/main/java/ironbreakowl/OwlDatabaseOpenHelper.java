@@ -160,6 +160,12 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     } else {
                         returnTypeValid = false;
                     }
+                    if (returnTypeValid && OwlUtils.isColumnType(info.modelClass)) {
+                        if (info.projection == null || info.projection.length != 1) {
+                            throw new IllegalArgumentException("Only one column is required for type " + info.modelClass.getName());
+                        }
+                        info.singleColumn = true;
+                    }
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
                     info.returnType = RETURN_TYPE_BOOLEAN;
                 } else if (returnType == Integer.TYPE || returnType == Integer.class) {
@@ -168,7 +174,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     returnTypeValid = false;
                 }
                 if (!returnTypeValid) {
-                    throw new IllegalArgumentException("Supported return types for @Query: Iterable<T>, boolean");
+                    throw new IllegalArgumentException("Invalid return type for @Query");
                 }
 
                 owl.queryInfos.put(method, info);
@@ -548,6 +554,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
         String[] projection;
         String orderBy;
         Annotation[][] paramAnnotations;
+        boolean singleColumn;
 
         @Override
         public Object query(OwlTable owl, Object[] args) {
@@ -567,17 +574,38 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                         cursor.close();
                         return count;
                     case RETURN_TYPE_ITERABLE:
-                        Iterable iterable = PlainDataModel.toIterable(cursor, modelClass, buildDeserializationArguments(args));
+                        Iterable iterable;
+                        if (singleColumn) {
+                            iterable = SingleColumn.newIterable(cursor, modelClass);
+                        } else {
+                            iterable = PlainDataModel.newIterable(cursor, modelClass, buildDeserializationArguments(args));
+                        }
                         new CursorCloser<>(cursor, iterable, iterableRefQueue);
                         return iterable;
                     case RETURN_TYPE_LIST:
-                        return PlainDataModel.toList(cursor, modelClass, buildDeserializationArguments(args));
+                        if (singleColumn) {
+                            return SingleColumn.newList(cursor, modelClass);
+                        } else {
+                            return PlainDataModel.newList(cursor, modelClass, buildDeserializationArguments(args));
+                        }
                     case RETURN_TYPE_OLD_OBSERVABLE:
-                        return PlainDataModel.toOldObservable(cursor, modelClass, buildDeserializationArguments(args));
+                        if (singleColumn) {
+                            return SingleColumn.newOldObservable(cursor, modelClass);
+                        } else {
+                            return PlainDataModel.newOldObservable(cursor, modelClass, buildDeserializationArguments(args));
+                        }
                     case RETURN_TYPE_FLOWABLE:
-                        return PlainDataModel.toFlowable(cursor, modelClass, buildDeserializationArguments(args));
+                        if (singleColumn) {
+                            return SingleColumn.newFlowable(cursor, modelClass);
+                        } else {
+                            return PlainDataModel.newFlowable(cursor, modelClass, buildDeserializationArguments(args));
+                        }
                     case RETURN_TYPE_MAYBE:
-                        return PlainDataModel.toMaybe(cursor, modelClass, buildDeserializationArguments(args));
+                        if (singleColumn) {
+                            return SingleColumn.newMaybe(cursor, modelClass);
+                        } else {
+                            return PlainDataModel.toMaybe(cursor, modelClass, buildDeserializationArguments(args));
+                        }
                 }
             } finally {
                 lock.unlock();

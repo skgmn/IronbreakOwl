@@ -5,16 +5,19 @@ import android.database.Cursor;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.annotation.Nullable;
+import android.support.v4.util.ArrayMap;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Map;
 
 class OwlUtils {
-    static Object readValue(Cursor cursor, int columnIndex, FieldInfo fieldInfo,
+    private static Map<Class, Parcelable.Creator> parcelCreators;
+
+    static Object readValue(Cursor cursor, int columnIndex, Class clazz,
                             @Nullable Object obj, @Nullable Field field) {
-        Class clazz = fieldInfo.type;
         try {
             if (clazz == Integer.TYPE) {
                 int value = cursor.getInt(columnIndex);
@@ -90,11 +93,7 @@ class OwlUtils {
             byte[] bytes = cursor.getBlob(columnIndex);
             parcel.unmarshall(bytes, 0, bytes.length);
             parcel.setDataPosition(0);
-            Parcelable.Creator parcelCreator = fieldInfo.parcelCreator;
-            if (parcelCreator == null) {
-                parcelCreator = getParcelCreator(clazz);
-            }
-            value = parcelCreator.createFromParcel(parcel);
+            value = getParcelCreator(clazz).createFromParcel(parcel);
             parcel.recycle();
         } else {
             throw new IllegalArgumentException("Unsupported type: " + clazz.getCanonicalName());
@@ -112,14 +111,26 @@ class OwlUtils {
     }
 
     static Parcelable.Creator getParcelCreator(Class clazz) {
+        synchronized (OwlUtils.class) {
+            Parcelable.Creator creator = parcelCreators == null ? null : parcelCreators.get(clazz);
+            if (creator != null) {
+                return creator;
+            }
+        }
         try {
             Field creatorField = clazz.getField("CREATOR");
             creatorField.setAccessible(true);
-            Parcelable.Creator parcelCreator = (Parcelable.Creator) creatorField.get(clazz);
-            if (parcelCreator == null) {
+            Parcelable.Creator creator = (Parcelable.Creator) creatorField.get(clazz);
+            if (creator == null) {
                 throw new NullPointerException();
             }
-            return parcelCreator;
+            synchronized (OwlUtils.class) {
+                if (parcelCreators == null) {
+                    parcelCreators = new ArrayMap<>();
+                }
+                parcelCreators.put(clazz, creator);
+            }
+            return creator;
         } catch (Exception ignored) {
             throw new IllegalArgumentException("Cannot find CREATOR for " + clazz.getCanonicalName());
         }
@@ -187,5 +198,23 @@ class OwlUtils {
 
     static boolean isModel(Class clazz) {
         return clazz.isAnnotationPresent(Model.class);
+    }
+
+    static boolean isColumnType(Class clazz) {
+        return clazz == Integer.TYPE ||
+                clazz == Long.TYPE ||
+                clazz == Boolean.TYPE ||
+                clazz == Double.TYPE ||
+                clazz == Float.TYPE ||
+                clazz == Short.TYPE ||
+                clazz == Integer.class ||
+                clazz == String.class ||
+                clazz == Long.class ||
+                clazz == Boolean.class ||
+                clazz == byte[].class ||
+                clazz == Float.class ||
+                clazz == Double.class ||
+                clazz == Short.class ||
+                (Parcelable.class.isAssignableFrom(clazz) && !isModel(clazz));
     }
 }

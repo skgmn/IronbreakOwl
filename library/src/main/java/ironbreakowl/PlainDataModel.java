@@ -5,10 +5,6 @@ import android.database.Cursor;
 import android.support.v4.util.ArrayMap;
 import android.util.Pair;
 
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -16,14 +12,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import rx.Observable;
-import rx.subscriptions.Subscriptions;
 
 class PlainDataModel {
     private static final Map<Class, PlainDataModel> models = new ArrayMap<>();
@@ -53,8 +47,8 @@ class PlainDataModel {
         }
     }
 
-    static <T> ArrayList<T> toList(final Cursor cursor, Class<T> clazz,
-                                   ModelDeserializationArguments args) {
+    static <T> ArrayList<T> newList(final Cursor cursor, Class<T> clazz,
+                                    ModelDeserializationArguments args) {
         final PlainDataModel model = getModel(clazz);
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
@@ -71,167 +65,62 @@ class PlainDataModel {
         return list;
     }
 
-    static <T> Iterable<T> toIterable(final Cursor cursor, Class<T> clazz,
-                                      ModelDeserializationArguments args) {
-        final PlainDataModel model = getModel(clazz);
-        return new Iterable<T>() {
-            private boolean iteratorCreated;
+    static <T> Iterable<T> newIterable(Cursor cursor, Class<T> clazz,
+                                       ModelDeserializationArguments args) {
+        return new CursorIterable<T>(cursor) {
+            private PlainDataModel model;
 
             @Override
-            public Iterator<T> iterator() {
-                if (iteratorCreated) {
-                    throw new IllegalStateException("This Iterable only allows one Iterator instance");
+            protected T readValue(Cursor cursor) throws Exception {
+                if (model == null) {
+                    model = getModel(clazz);
                 }
-                iteratorCreated = true;
-                return new Iterator<T>() {
-                    private boolean hasNext;
-                    private boolean hasNextCalled;
-
-                    @Override
-                    public boolean hasNext() {
-                        if (!hasNextCalled) {
-                            hasNextCalled = true;
-                            hasNext = cursor.moveToNext();
-                            if (!hasNext) {
-                                cursor.close();
-                            }
-                        }
-                        return hasNext;
-                    }
-
-                    @Override
-                    public T next() {
-                        try {
-                            T obj = model.fetchRow(cursor, args);
-                            if (cursor.isLast()) {
-                                hasNextCalled = true;
-                                hasNext = false;
-                                cursor.close();
-                            } else {
-                                hasNextCalled = false;
-                            }
-                            return obj;
-                        } catch (RuntimeException e) {
-                            throw e;
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                };
+                return model.fetchRow(cursor, args);
             }
         };
     }
 
-    static <T> Flowable<T> toFlowable(final Cursor cursor, Class<T> clazz,
-                                      ModelDeserializationArguments args) {
-        return Flowable.unsafeCreate(new Publisher<T>() {
+    static <T> Flowable<T> newFlowable(final Cursor cursor, Class<T> clazz,
+                                       ModelDeserializationArguments args) {
+        return Flowable.unsafeCreate(new CursorPublisher<T>(cursor) {
+            private PlainDataModel model;
+
             @Override
-            public void subscribe(Subscriber<? super T> s) {
-                final PlainDataModel model = getModel(clazz);
-                s.onSubscribe(new Subscription() {
-                    private volatile boolean reading;
-                    private volatile boolean canceled;
-
-                    @Override
-                    public void request(long n) {
-                        reading = true;
-                        try {
-                            for (int i = 0; i < n && !canceled; ++i) {
-                                final boolean complete;
-                                if (cursor.moveToNext()) {
-                                    T obj = model.fetchRow(cursor, args);
-                                    s.onNext(obj);
-                                    complete = cursor.isLast();
-                                } else {
-                                    complete = true;
-                                }
-                                if (complete) {
-                                    cursor.close();
-                                    s.onComplete();
-                                    break;
-                                }
-                            }
-                        } catch (Throwable e) {
-                            s.onError(e);
-                        } finally {
-                            if (canceled && !cursor.isClosed()) {
-                                cursor.close();
-                            }
-                            reading = false;
-                        }
-                    }
-
-                    @Override
-                    public void cancel() {
-                        canceled = true;
-                        if (!reading && !cursor.isClosed()) {
-                            cursor.close();
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    static <T> Maybe<T> toMaybe(final Cursor cursor, Class<T> clazz,
-                                ModelDeserializationArguments args) {
-        return Maybe.create(emitter -> {
-            final PlainDataModel model = getModel(clazz);
-            try {
-                if (cursor.moveToNext()) {
-                    T obj = model.fetchRow(cursor, args);
-                    emitter.onSuccess(obj);
-                } else {
-                    emitter.onComplete();
+            protected T readValue(Cursor cursor) throws Exception {
+                if (model == null) {
+                    model = getModel(clazz);
                 }
-            } catch (Throwable e) {
-                emitter.onError(e);
-            } finally {
-                cursor.close();
+                return model.fetchRow(cursor, args);
             }
         });
     }
 
-    static <T> Observable<T> toOldObservable(final Cursor cursor, Class<T> clazz,
-                                             ModelDeserializationArguments args) {
-        return Observable.create(new Observable.OnSubscribe<T>() {
-            private volatile boolean reading;
+    static <T> Maybe<T> toMaybe(Cursor cursor, Class<T> clazz,
+                                ModelDeserializationArguments args) {
+        return Maybe.create(new CursorMaybeOnSubscribe<T>(cursor) {
+            private PlainDataModel model;
 
             @Override
-            public void call(rx.Subscriber<? super T> s) {
-                final PlainDataModel model = getModel(clazz);
-                s.setProducer(n -> {
-                    reading = true;
-                    try {
-                        for (int i = 0; i < n && !s.isUnsubscribed(); ++i) {
-                            final boolean complete;
-                            if (cursor.moveToNext()) {
-                                T obj = model.fetchRow(cursor, args);
-                                s.onNext(obj);
-                                complete = cursor.isLast();
-                            } else {
-                                complete = true;
-                            }
-                            if (complete) {
-                                cursor.close();
-                                s.onCompleted();
-                                break;
-                            }
-                        }
-                    } catch (Throwable e) {
-                        s.onError(e);
-                    } finally {
-                        if (s.isUnsubscribed() && !cursor.isClosed()) {
-                            cursor.close();
-                        }
-                        reading = false;
-                    }
-                });
-                s.add(Subscriptions.create(() -> {
-                    if (!reading && !cursor.isClosed()) {
-                        cursor.close();
-                    }
-                }));
+            protected T readValue(Cursor cursor) throws Exception {
+                if (model == null) {
+                    model = getModel(clazz);
+                }
+                return model.fetchRow(cursor, args);
+            }
+        });
+    }
+
+    static <T> Observable<T> newOldObservable(Cursor cursor, Class<T> clazz,
+                                              ModelDeserializationArguments args) {
+        return Observable.create(new CursorOldObservableOnSubscribe<T>(cursor) {
+            private PlainDataModel model;
+
+            @Override
+            T readValue(Cursor cursor) throws Exception {
+                if (model == null) {
+                    model = getModel(clazz);
+                }
+                return model.fetchRow(cursor, args);
             }
         });
     }
@@ -262,7 +151,7 @@ class PlainDataModel {
                     if (fieldInfo != null) {
                         params[i] = OwlUtils.readValue(cursor,
                                 cursor.getColumnIndex(fieldInfo.column.value()),
-                                fieldInfo, null, null);
+                                fieldInfo.type, null, null);
                         continue;
                     }
                 }
@@ -305,7 +194,7 @@ class PlainDataModel {
                 }
                 Field field = pair.first;
                 int columnIndex = cursor.getColumnIndex(columnName);
-                OwlUtils.readValue(cursor, columnIndex, fieldInfo, obj, field);
+                OwlUtils.readValue(cursor, columnIndex, fieldInfo.type, obj, field);
             }
         }
         return obj;
@@ -369,7 +258,7 @@ class PlainDataModel {
                             }
                             FieldInfo fieldInfo = new FieldInfo();
                             fieldInfo.column = (Column) annotation;
-                            fieldInfo.setType(ctor.getParameterTypes()[i]);
+                            fieldInfo.type = ctor.getParameterTypes()[i];
                             model.ctorColumns[i] = fieldInfo;
                         } else {
                             unknown = true;
@@ -412,7 +301,7 @@ class PlainDataModel {
                 FieldInfo fieldInfo = new FieldInfo();
                 Class<?> fieldType = field.getType();
                 fieldInfo.column = column;
-                fieldInfo.setType(fieldType);
+                fieldInfo.type = (Class) fieldType;
                 fieldInfo.conditional = field.getAnnotation(Conditional.class) != null;
                 field.setAccessible(true);
                 fields.add(new Pair<>(field, fieldInfo));

@@ -90,6 +90,15 @@ public class QueryTest extends DataTestBase {
         assertEquals("333", values.get(2).privateData);
     }
 
+    @Test
+    public void singleColumn() {
+        List<String> names = userTable.getNames();
+        assertEquals(3, names.size());
+        assertEquals("User1", names.get(0));
+        assertEquals("User2", names.get(1));
+        assertEquals("User3", names.get(2));
+    }
+
     private void assertValues(List<User> values) {
         assertEquals("User1", values.get(0).name);
         assertTrue(values.get(0).hasPhone);

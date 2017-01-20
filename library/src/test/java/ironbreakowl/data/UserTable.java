@@ -55,4 +55,7 @@ public interface UserTable {
 
     @Query
     List<User> getAllList(@Condition(PRIVATE_DATA) Predicate<User> loadPrivateData);
+
+    @Query(select = NAME)
+    List<String> getNames();
 }
