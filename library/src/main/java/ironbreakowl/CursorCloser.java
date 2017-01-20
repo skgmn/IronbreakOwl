@@ -2,10 +2,10 @@ package ironbreakowl;
 
 import android.database.Cursor;
 
+import java.lang.ref.PhantomReference;
 import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
 
-class CursorCloser<T> extends WeakReference<T> {
+class CursorCloser<T> extends PhantomReference<T> {
     private Cursor cursor;
 
     CursorCloser(Cursor cursor, T referent, ReferenceQueue<? super T> q) {
