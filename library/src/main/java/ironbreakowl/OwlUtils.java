@@ -72,22 +72,24 @@ class OwlUtils {
             throw new RuntimeException(e);
         }
         Object value;
-        if (clazz == Integer.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex);
+        if (cursor.isNull(columnIndex)) {
+            value = null;
+        } else if (clazz == Integer.class) {
+            value = cursor.getInt(columnIndex);
         } else if (clazz == String.class) {
             value = cursor.getString(columnIndex);
         } else if (clazz == Long.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getLong(columnIndex);
+            value = cursor.getLong(columnIndex);
         } else if (clazz == Boolean.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex) != 0;
+            value = cursor.getInt(columnIndex) != 0;
         } else if (clazz == byte[].class) {
             value = cursor.getBlob(columnIndex);
         } else if (clazz == Float.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getFloat(columnIndex);
+            value = cursor.getFloat(columnIndex);
         } else if (clazz == Double.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getDouble(columnIndex);
+            value = cursor.getDouble(columnIndex);
         } else if (clazz == Short.class) {
-            value = cursor.isNull(columnIndex) ? null : cursor.getShort(columnIndex);
+            value = cursor.getShort(columnIndex);
         } else if (Parcelable.class.isAssignableFrom(clazz)) {
             Parcel parcel = Parcel.obtain();
             byte[] bytes = cursor.getBlob(columnIndex);
@@ -110,7 +112,7 @@ class OwlUtils {
         }
     }
 
-    static Parcelable.Creator getParcelCreator(Class clazz) {
+    private static Parcelable.Creator getParcelCreator(Class clazz) {
         synchronized (OwlUtils.class) {
             Parcelable.Creator creator = parcelCreators == null ? null : parcelCreators.get(clazz);
             if (creator != null) {
