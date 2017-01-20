@@ -184,4 +184,8 @@ class OwlUtils {
         //noinspection ConstantConditions
         return (Class) type;
     }
+
+    static boolean isModel(Class clazz) {
+        return clazz.isAnnotationPresent(Model.class);
+    }
 }

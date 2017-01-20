@@ -3,7 +3,9 @@ package ironbreakowl.data;
 import ironbreakowl.Column;
 import ironbreakowl.Condition;
 import ironbreakowl.Conditional;
+import ironbreakowl.Model;
 
+@Model
 public class User {
     @Column(UserTable.NAME)
     public String name;

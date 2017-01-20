@@ -327,8 +327,10 @@ class PlainDataModel {
             throw new IllegalArgumentException("Interface or abstract class is not allowed: "
                     + clazz.getCanonicalName());
         }
+        if (!OwlUtils.isModel(clazz)) {
+            throw new IllegalArgumentException("Model class should be annotated with @Model");
+        }
         PlainDataModel model = new PlainDataModel();
-
         for (Constructor ctor : clazz.getDeclaredConstructors()) {
             Annotation[][] annotations = ctor.getParameterAnnotations();
             int length = annotations.length;
