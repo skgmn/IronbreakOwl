@@ -205,8 +205,20 @@ class PlainDataModel {
                     }
                 }
                 Field field = pair.first;
-                int columnIndex = cursor.getColumnIndex(columnName);
-                OwlUtils.readValue(cursor, columnIndex, fieldInfo.type, obj, field);
+                if (fieldInfo.lazy) {
+                    final int index = indexedCursor.index.get();
+                    Lazy<Object> lazy = new Lazy<>(() -> {
+                        if (index != indexedCursor.index.get()) {
+                            throw new IllegalStateException("Cursor has already passed away");
+                        }
+                        return OwlUtils.readValue(cursor, cursor.getColumnIndex(columnName),
+                                fieldInfo.type, null, null);
+                    });
+                    field.set(obj, lazy);
+                } else {
+                    OwlUtils.readValue(cursor, cursor.getColumnIndex(columnName), fieldInfo.type,
+                            obj, field);
+                }
             }
         }
         return obj;
@@ -311,9 +323,6 @@ class PlainDataModel {
                 if (column == null) continue;
 
                 FieldInfo fieldInfo = new FieldInfo(column, field.getGenericType());
-                if (fieldInfo.lazy) {
-                    throw new IllegalArgumentException("Lazy is not supported for fields");
-                }
                 field.setAccessible(true);
                 fields.add(new Pair<>(field, fieldInfo));
             }
