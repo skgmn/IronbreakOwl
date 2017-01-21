@@ -8,10 +8,10 @@ import org.reactivestreams.Subscription;
 
 abstract class CursorPublisher<T> implements Publisher<T> {
     @SuppressWarnings("WeakerAccess")
-    final Cursor cursor;
+    final IndexedCursor indexedCursor;
 
     CursorPublisher(Cursor cursor) {
-        this.cursor = cursor;
+        indexedCursor = new IndexedCursor(cursor);
     }
 
     @Override
@@ -26,15 +26,15 @@ abstract class CursorPublisher<T> implements Publisher<T> {
                 try {
                     for (int i = 0; i < n && !canceled; ++i) {
                         final boolean complete;
-                        if (cursor.moveToNext()) {
-                            T obj = readValue(cursor);
+                        if (indexedCursor.moveToNext()) {
+                            T obj = readValue(indexedCursor);
                             s.onNext(obj);
-                            complete = cursor.isLast();
+                            complete = indexedCursor.cursor.isLast();
                         } else {
                             complete = true;
                         }
                         if (complete) {
-                            cursor.close();
+                            indexedCursor.cursor.close();
                             s.onComplete();
                             break;
                         }
@@ -42,8 +42,8 @@ abstract class CursorPublisher<T> implements Publisher<T> {
                 } catch (Throwable e) {
                     s.onError(e);
                 } finally {
-                    if (canceled && !cursor.isClosed()) {
-                        cursor.close();
+                    if (canceled && !indexedCursor.cursor.isClosed()) {
+                        indexedCursor.cursor.close();
                     }
                     reading = false;
                 }
@@ -52,12 +52,12 @@ abstract class CursorPublisher<T> implements Publisher<T> {
             @Override
             public void cancel() {
                 canceled = true;
-                if (!reading && !cursor.isClosed()) {
-                    cursor.close();
+                if (!reading && !indexedCursor.cursor.isClosed()) {
+                    indexedCursor.cursor.close();
                 }
             }
         });
     }
 
-    protected abstract T readValue(Cursor cursor) throws Exception;
+    abstract T readValue(IndexedCursor cursor) throws Exception;
 }

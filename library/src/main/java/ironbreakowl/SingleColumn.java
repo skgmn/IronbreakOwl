@@ -13,9 +13,9 @@ final class SingleColumn {
     static <T> Iterable<T> newIterable(Cursor cursor, Class<T> clazz) {
         return new CursorIterable<T>(cursor) {
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 //noinspection unchecked
-                return (T) OwlUtils.readValue(cursor, 0, clazz, null, null);
+                return (T) OwlUtils.readValue(cursor.cursor, 0, clazz, null, null);
             }
         };
     }
@@ -33,9 +33,9 @@ final class SingleColumn {
     static <T> Observable<T> newOldObservable(Cursor cursor, Class<T> clazz) {
         return Observable.create(new CursorOldObservableOnSubscribe<T>(cursor) {
             @Override
-            T readValue(Cursor cursor) throws Exception {
+            T readValue(IndexedCursor cursor) throws Exception {
                 //noinspection unchecked
-                return (T) OwlUtils.readValue(cursor, 0, clazz, null, null);
+                return (T) OwlUtils.readValue(cursor.cursor, 0, clazz, null, null);
             }
         });
     }
@@ -43,9 +43,9 @@ final class SingleColumn {
     static <T> Flowable<T> newFlowable(Cursor cursor, Class<T> clazz) {
         return Flowable.unsafeCreate(new CursorPublisher<T>(cursor) {
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 //noinspection unchecked
-                return (T) OwlUtils.readValue(cursor, 0, clazz, null, null);
+                return (T) OwlUtils.readValue(cursor.cursor, 0, clazz, null, null);
             }
         });
     }
@@ -53,9 +53,9 @@ final class SingleColumn {
     static <T> Maybe<T> newMaybe(Cursor cursor, Class<T> clazz) {
         return Maybe.create(new CursorMaybeOnSubscribe<T>(cursor) {
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 //noinspection unchecked
-                return (T) OwlUtils.readValue(cursor, 0, clazz, null, null);
+                return (T) OwlUtils.readValue(cursor.cursor, 0, clazz, null, null);
             }
         });
     }

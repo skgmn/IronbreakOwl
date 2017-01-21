@@ -6,11 +6,11 @@ import java.util.Iterator;
 
 abstract class CursorIterable<T> implements Iterable<T> {
     @SuppressWarnings("WeakerAccess")
-    final Cursor cursor;
+    final IndexedCursor indexedCursor;
     private boolean iteratorCreated;
 
     CursorIterable(Cursor cursor) {
-        this.cursor = cursor;
+        indexedCursor = new IndexedCursor(cursor);
     }
 
     @Override
@@ -27,9 +27,8 @@ abstract class CursorIterable<T> implements Iterable<T> {
             public boolean hasNext() {
                 if (!hasNextCalled) {
                     hasNextCalled = true;
-                    hasNext = cursor.moveToNext();
-                    if (!hasNext) {
-                        cursor.close();
+                    if (!(hasNext = indexedCursor.moveToNext())) {
+                        indexedCursor.cursor.close();
                     }
                 }
                 return hasNext;
@@ -38,11 +37,11 @@ abstract class CursorIterable<T> implements Iterable<T> {
             @Override
             public T next() {
                 try {
-                    T obj = readValue(cursor);
-                    if (cursor.isLast()) {
+                    T obj = readValue(indexedCursor);
+                    if (indexedCursor.cursor.isLast()) {
                         hasNextCalled = true;
                         hasNext = false;
-                        cursor.close();
+                        indexedCursor.cursor.close();
                     } else {
                         hasNextCalled = false;
                     }
@@ -56,5 +55,5 @@ abstract class CursorIterable<T> implements Iterable<T> {
         };
     }
 
-    protected abstract T readValue(Cursor cursor) throws Exception;
+    abstract T readValue(IndexedCursor cursor) throws Exception;
 }

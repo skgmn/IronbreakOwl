@@ -9,4 +9,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER})
 public @interface Column {
     String value();
+    boolean conditional() default false;
 }

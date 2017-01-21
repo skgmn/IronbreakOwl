@@ -2,7 +2,6 @@ package ironbreakowl.data;
 
 import ironbreakowl.Column;
 import ironbreakowl.Condition;
-import ironbreakowl.Conditional;
 import ironbreakowl.Model;
 
 @Model
@@ -15,8 +14,7 @@ public class User {
     public String phoneNumber;
     @Column(UserTable.IS_PUBLIC)
     public boolean isPublic;
-    @Conditional
-    @Column(UserTable.PRIVATE_DATA)
+    @Column(value = UserTable.PRIVATE_DATA, conditional = true)
     public String privateData;
 
     @SuppressWarnings("unused")

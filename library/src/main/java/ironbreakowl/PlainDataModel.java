@@ -49,11 +49,12 @@ class PlainDataModel {
 
     static <T> ArrayList<T> newList(final Cursor cursor, Class<T> clazz,
                                     ModelDeserializationArguments args) {
-        final PlainDataModel model = getModel(clazz);
+        PlainDataModel model = getModel(clazz);
+        IndexedCursor indexedCursor = new IndexedCursor(cursor);
         ArrayList<T> list = new ArrayList<>();
         while (cursor.moveToNext()) {
             try {
-                T obj = model.fetchRow(cursor, args);
+                T obj = model.fetchRow(indexedCursor, args);
                 list.add(obj);
             } catch (RuntimeException e) {
                 throw e;
@@ -71,7 +72,7 @@ class PlainDataModel {
             private PlainDataModel model;
 
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 if (model == null) {
                     model = getModel(clazz);
                 }
@@ -86,7 +87,7 @@ class PlainDataModel {
             private PlainDataModel model;
 
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 if (model == null) {
                     model = getModel(clazz);
                 }
@@ -101,7 +102,7 @@ class PlainDataModel {
             private PlainDataModel model;
 
             @Override
-            protected T readValue(Cursor cursor) throws Exception {
+            protected T readValue(IndexedCursor cursor) throws Exception {
                 if (model == null) {
                     model = getModel(clazz);
                 }
@@ -116,7 +117,7 @@ class PlainDataModel {
             private PlainDataModel model;
 
             @Override
-            T readValue(Cursor cursor) throws Exception {
+            T readValue(IndexedCursor cursor) throws Exception {
                 if (model == null) {
                     model = getModel(clazz);
                 }
@@ -126,9 +127,10 @@ class PlainDataModel {
     }
 
     @SuppressWarnings("WeakerAccess")
-    <T> T fetchRow(Cursor cursor, ModelDeserializationArguments args)
+    <T> T fetchRow(IndexedCursor indexedCursor, ModelDeserializationArguments args)
             throws InstantiationException, IllegalAccessException, InvocationTargetException {
         T obj;
+        Cursor cursor = indexedCursor.cursor;
         FieldInfo[] columns = this.ctorColumns;
         String[] parameterNames = this.ctorParamNames;
         if (columns == null && parameterNames == null) {
@@ -146,14 +148,24 @@ class PlainDataModel {
                         continue;
                     }
                 }
-                if (columns != null) {
-                    FieldInfo fieldInfo = columns[i];
-                    if (fieldInfo != null) {
+                FieldInfo fieldInfo = columns == null ? null : columns[i];
+                if (fieldInfo != null) {
+                    if (fieldInfo.lazy) {
+                        final int index = indexedCursor.index.get();
+                        params[i] = new Lazy<>(() -> {
+                            if (index != indexedCursor.index.get()) {
+                                throw new IllegalStateException("Cursor has already passed away");
+                            }
+                            return OwlUtils.readValue(cursor,
+                                    cursor.getColumnIndex(fieldInfo.column.value()),
+                                    fieldInfo.type, null, null);
+                        });
+                    } else {
                         params[i] = OwlUtils.readValue(cursor,
                                 cursor.getColumnIndex(fieldInfo.column.value()),
                                 fieldInfo.type, null, null);
-                        continue;
                     }
+                    continue;
                 }
                 throw new IllegalStateException();
             }
@@ -165,7 +177,7 @@ class PlainDataModel {
             boolean cond = i == 1;
             for (Pair<Field, FieldInfo> pair : fields) {
                 FieldInfo fieldInfo = pair.second;
-                if (fieldInfo.conditional != cond) {
+                if (fieldInfo.column.conditional() != cond) {
                     continue;
                 }
                 String columnName = fieldInfo.column.value();
@@ -243,6 +255,7 @@ class PlainDataModel {
                 }
                 model.ctor = ctor;
                 ctor.setAccessible(true);
+                Class[] paramTypes = ctor.getParameterTypes();
                 for (int i = 0; i < length; ++i) {
                     Annotation[] parameterAnnotations = annotations[i];
                     boolean unknown = parameterAnnotations.length == 0;
@@ -256,9 +269,7 @@ class PlainDataModel {
                             if (model.ctorColumns == null) {
                                 model.ctorColumns = new FieldInfo[length];
                             }
-                            FieldInfo fieldInfo = new FieldInfo();
-                            fieldInfo.column = (Column) annotation;
-                            fieldInfo.type = ctor.getParameterTypes()[i];
+                            FieldInfo fieldInfo = new FieldInfo((Column) annotation, paramTypes[i]);
                             model.ctorColumns[i] = fieldInfo;
                         } else {
                             unknown = true;
@@ -299,11 +310,10 @@ class PlainDataModel {
                 Column column = field.getAnnotation(Column.class);
                 if (column == null) continue;
 
-                FieldInfo fieldInfo = new FieldInfo();
-                Class<?> fieldType = field.getType();
-                fieldInfo.column = column;
-                fieldInfo.type = (Class) fieldType;
-                fieldInfo.conditional = field.getAnnotation(Conditional.class) != null;
+                FieldInfo fieldInfo = new FieldInfo(column, field.getGenericType());
+                if (fieldInfo.lazy) {
+                    throw new IllegalArgumentException("Lazy is not supported for fields");
+                }
                 field.setAccessible(true);
                 fields.add(new Pair<>(field, fieldInfo));
             }

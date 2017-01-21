@@ -7,11 +7,11 @@ import rx.subscriptions.Subscriptions;
 
 abstract class CursorOldObservableOnSubscribe<T> implements Observable.OnSubscribe<T> {
     @SuppressWarnings("WeakerAccess")
-    final Cursor cursor;
+    final IndexedCursor indexedCursor;
     private volatile boolean reading;
 
     CursorOldObservableOnSubscribe(Cursor cursor) {
-        this.cursor = cursor;
+        indexedCursor = new IndexedCursor(cursor);
     }
 
     @Override
@@ -21,15 +21,15 @@ abstract class CursorOldObservableOnSubscribe<T> implements Observable.OnSubscri
             try {
                 for (int i = 0; i < n && !s.isUnsubscribed(); ++i) {
                     final boolean complete;
-                    if (cursor.moveToNext()) {
-                        T obj = readValue(cursor);
+                    if (indexedCursor.moveToNext()) {
+                        T obj = readValue(indexedCursor);
                         s.onNext(obj);
-                        complete = cursor.isLast();
+                        complete = indexedCursor.cursor.isLast();
                     } else {
                         complete = true;
                     }
                     if (complete) {
-                        cursor.close();
+                        indexedCursor.cursor.close();
                         s.onCompleted();
                         break;
                     }
@@ -37,18 +37,18 @@ abstract class CursorOldObservableOnSubscribe<T> implements Observable.OnSubscri
             } catch (Throwable e) {
                 s.onError(e);
             } finally {
-                if (s.isUnsubscribed() && !cursor.isClosed()) {
-                    cursor.close();
+                if (s.isUnsubscribed() && !indexedCursor.cursor.isClosed()) {
+                    indexedCursor.cursor.close();
                 }
                 reading = false;
             }
         });
         s.add(Subscriptions.create(() -> {
-            if (!reading && !cursor.isClosed()) {
-                cursor.close();
+            if (!reading && !indexedCursor.cursor.isClosed()) {
+                indexedCursor.cursor.close();
             }
         }));
     }
 
-    abstract T readValue(Cursor cursor) throws Exception;
+    abstract T readValue(IndexedCursor cursor) throws Exception;
 }

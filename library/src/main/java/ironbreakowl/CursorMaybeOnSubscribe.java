@@ -6,17 +6,17 @@ import io.reactivex.MaybeEmitter;
 import io.reactivex.MaybeOnSubscribe;
 
 abstract class CursorMaybeOnSubscribe<T> implements MaybeOnSubscribe<T> {
-    private final Cursor cursor;
+    private final IndexedCursor indexedCursor;
 
     CursorMaybeOnSubscribe(Cursor cursor) {
-        this.cursor = cursor;
+        indexedCursor = new IndexedCursor(cursor);
     }
 
     @Override
     public void subscribe(MaybeEmitter<T> emitter) throws Exception {
         try {
-            if (cursor.moveToNext()) {
-                T obj = readValue(cursor);
+            if (indexedCursor.moveToNext()) {
+                T obj = readValue(indexedCursor);
                 emitter.onSuccess(obj);
             } else {
                 emitter.onComplete();
@@ -24,9 +24,9 @@ abstract class CursorMaybeOnSubscribe<T> implements MaybeOnSubscribe<T> {
         } catch (Throwable e) {
             emitter.onError(e);
         } finally {
-            cursor.close();
+            indexedCursor.cursor.close();
         }
     }
 
-    protected abstract T readValue(Cursor cursor) throws Exception;
+    protected abstract T readValue(IndexedCursor cursor) throws Exception;
 }
