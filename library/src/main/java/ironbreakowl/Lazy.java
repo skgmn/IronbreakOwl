@@ -6,8 +6,8 @@ import java.util.concurrent.Callable;
 
 public class Lazy<T> {
     private final Object lock = new Object();
-    private Callable<T> callable;
-    private T value;
+    private volatile Callable<T> callable;
+    private volatile T value;
 
     Lazy(@NonNull Callable<T> callable) {
         this.callable = callable;
