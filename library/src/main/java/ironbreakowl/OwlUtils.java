@@ -172,7 +172,7 @@ class OwlUtils {
         }
     }
 
-    static Class getActualType(ParameterizedType pt, int index) {
+    static Type getActualType(ParameterizedType pt, int index) {
         Type type = pt.getActualTypeArguments()[index];
         if (type instanceof GenericArrayType) {
             Type dataType = ((GenericArrayType) type).getGenericComponentType();
@@ -194,8 +194,7 @@ class OwlUtils {
                 return double[].class;
             }
         }
-        //noinspection ConstantConditions
-        return (Class) type;
+        return type;
     }
 
     static boolean isModel(Class clazz) {

@@ -16,7 +16,7 @@ class FieldInfo {
             Type rawType = pt.getRawType();
             if (rawType == Lazy.class) {
                 lazy = true;
-                Type actualType = pt.getActualTypeArguments()[0];
+                Type actualType = OwlUtils.getActualType(pt, 0);
                 if (actualType instanceof Class) {
                     clazz = (Class) actualType;
                 }

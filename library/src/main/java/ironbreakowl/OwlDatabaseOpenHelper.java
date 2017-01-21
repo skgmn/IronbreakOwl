@@ -142,29 +142,33 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                 if (returnType instanceof ParameterizedType) {
                     ParameterizedType pt = (ParameterizedType) returnType;
                     Type rawType = pt.getRawType();
+                    Type modelType = null;
                     if (rawType == Iterable.class) {
                         info.returnType = RETURN_TYPE_ITERABLE;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                        modelType = OwlUtils.getActualType(pt, 0);
                     } else if (rawType == List.class) {
                         info.returnType = RETURN_TYPE_LIST;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                        modelType = OwlUtils.getActualType(pt, 0);
                     } else if (isFlowable(rawType)) {
                         info.returnType = RETURN_TYPE_FLOWABLE;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                        modelType = OwlUtils.getActualType(pt, 0);
                     } else if (isMaybe(rawType)) {
                         info.returnType = RETURN_TYPE_MAYBE;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                        modelType = OwlUtils.getActualType(pt, 0);
                     } else if (isOldObservable(rawType)) {
                         info.returnType = RETURN_TYPE_OLD_OBSERVABLE;
-                        info.modelClass = OwlUtils.getActualType(pt, 0);
+                        modelType = OwlUtils.getActualType(pt, 0);
+                    }
+                    if (modelType instanceof Class) {
+                        info.modelClass = (Class) modelType;
+                        if (OwlUtils.isColumnType(info.modelClass)) {
+                            if (info.projection == null || info.projection.length != 1) {
+                                throw new IllegalArgumentException("Only one column is required for type " + info.modelClass.getName());
+                            }
+                            info.singleColumn = true;
+                        }
                     } else {
                         returnTypeValid = false;
-                    }
-                    if (returnTypeValid && OwlUtils.isColumnType(info.modelClass)) {
-                        if (info.projection == null || info.projection.length != 1) {
-                            throw new IllegalArgumentException("Only one column is required for type " + info.modelClass.getName());
-                        }
-                        info.singleColumn = true;
                     }
                 } else if (returnType == Boolean.TYPE || returnType == Boolean.class) {
                     info.returnType = RETURN_TYPE_BOOLEAN;
