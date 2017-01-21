@@ -38,13 +38,7 @@ abstract class CursorIterable<T> implements Iterable<T> {
             public T next() {
                 try {
                     T obj = readValue(indexedCursor);
-                    if (indexedCursor.cursor.isLast()) {
-                        hasNextCalled = true;
-                        hasNext = false;
-                        indexedCursor.cursor.close();
-                    } else {
-                        hasNextCalled = false;
-                    }
+                    hasNextCalled = false;
                     return obj;
                 } catch (RuntimeException e) {
                     throw e;

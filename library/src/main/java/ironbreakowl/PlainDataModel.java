@@ -153,7 +153,7 @@ class PlainDataModel {
                     if (fieldInfo.lazy) {
                         final int index = indexedCursor.index.get();
                         params[i] = new Lazy<>(() -> {
-                            if (index != indexedCursor.index.get()) {
+                            if (index != indexedCursor.index.get() || indexedCursor.cursor.isClosed()) {
                                 throw new IllegalStateException("Cursor has already passed away");
                             }
                             return OwlUtils.readValue(cursor,
@@ -208,7 +208,7 @@ class PlainDataModel {
                 if (fieldInfo.lazy) {
                     final int index = indexedCursor.index.get();
                     Lazy<Object> lazy = new Lazy<>(() -> {
-                        if (index != indexedCursor.index.get()) {
+                        if (index != indexedCursor.index.get() || indexedCursor.cursor.isClosed()) {
                             throw new IllegalStateException("Cursor has already passed away");
                         }
                         return OwlUtils.readValue(cursor, cursor.getColumnIndex(columnName),
