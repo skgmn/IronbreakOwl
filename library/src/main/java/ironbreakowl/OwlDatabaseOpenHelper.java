@@ -44,6 +44,7 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
     protected static final String DEFAULT_NULL = "default null";
+    protected static final String PRIMARY_KEY = "primary key";
 
     private static final Pattern PATTERN_CONSTANT_ARGUMENT_PLACEHOLDER_OR_STRING =
             Pattern.compile("'(?:[^']|\\\\')'|`[^`]`|%[dsb]");
