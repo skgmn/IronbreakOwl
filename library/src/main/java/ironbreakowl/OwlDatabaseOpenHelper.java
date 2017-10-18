@@ -28,7 +28,6 @@ import java.util.regex.Pattern;
 
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
-import rx.Observable;
 
 public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_BOOLEAN = 0;
@@ -37,9 +36,8 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
     private static final int RETURN_TYPE_LONG = 3;
     private static final int RETURN_TYPE_LIST = 4;
     private static final int RETURN_TYPE_ITERABLE = 5;
-    private static final int RETURN_TYPE_OLD_OBSERVABLE = 6;
-    private static final int RETURN_TYPE_FLOWABLE = 7;
-    private static final int RETURN_TYPE_MAYBE = 8;
+    private static final int RETURN_TYPE_FLOWABLE = 6;
+    private static final int RETURN_TYPE_MAYBE = 7;
 
     protected static final String AUTO_INCREMENT = "autoincrement";
     protected static final String NOT_NULL = "not null";
@@ -156,9 +154,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                     } else if (isMaybe(rawType)) {
                         info.returnType = RETURN_TYPE_MAYBE;
                         modelType = OwlUtils.getActualType(pt, 0);
-                    } else if (isOldObservable(rawType)) {
-                        info.returnType = RETURN_TYPE_OLD_OBSERVABLE;
-                        modelType = OwlUtils.getActualType(pt, 0);
                     }
                     if (modelType instanceof Class) {
                         info.modelClass = (Class) modelType;
@@ -268,10 +263,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
 
         tables.put(clazz, owl);
         return owl;
-    }
-
-    private static boolean isOldObservable(Type type) {
-        return RxJavaHelper.hasRxJava1() && type == Observable.class;
     }
 
     private static boolean isFlowable(Type type) {
@@ -592,12 +583,6 @@ public abstract class OwlDatabaseOpenHelper extends SQLiteOpenHelper {
                             return SingleColumn.newList(cursor, modelClass);
                         } else {
                             return PlainDataModel.newList(cursor, modelClass, buildDeserializationArguments(args));
-                        }
-                    case RETURN_TYPE_OLD_OBSERVABLE:
-                        if (singleColumn) {
-                            return SingleColumn.newOldObservable(cursor, modelClass);
-                        } else {
-                            return PlainDataModel.newOldObservable(cursor, modelClass, buildDeserializationArguments(args));
                         }
                     case RETURN_TYPE_FLOWABLE:
                         if (singleColumn) {

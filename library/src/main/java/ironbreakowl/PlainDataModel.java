@@ -17,7 +17,6 @@ import java.util.Map;
 
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
-import rx.Observable;
 
 class PlainDataModel {
     private static final Map<Class, PlainDataModel> models = new ArrayMap<>();
@@ -103,21 +102,6 @@ class PlainDataModel {
 
             @Override
             protected T readValue(IndexedCursor cursor) throws Exception {
-                if (model == null) {
-                    model = getModel(clazz);
-                }
-                return model.fetchRow(cursor, args);
-            }
-        });
-    }
-
-    static <T> Observable<T> newOldObservable(Cursor cursor, Class<T> clazz,
-                                              ModelDeserializationArguments args) {
-        return Observable.create(new CursorOldObservableOnSubscribe<T>(cursor) {
-            private PlainDataModel model;
-
-            @Override
-            T readValue(IndexedCursor cursor) throws Exception {
                 if (model == null) {
                     model = getModel(clazz);
                 }
